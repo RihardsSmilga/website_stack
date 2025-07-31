@@ -42,7 +42,6 @@
       border-radius: 6px;
       position: relative;
       user-select: none;
-      cursor: pointer;
     }
 
     .you {
@@ -58,6 +57,7 @@
     }
 
     .msg:hover {
+      cursor: pointer;
       background-color: #f0f0f0;
     }
 
@@ -72,29 +72,42 @@
       display: block;
     }
 
-    .orig-msg {
-      font-style: italic;
-      margin-top: 4px;
-      white-space: pre-wrap;
-      display: none;
-    }
-
-    .msg.show-ts .orig-msg {
-      display: block;
-    }
-
     .retract-btn {
-      margin-top: 4px;
+      margin-left: 8px;
       font-size: 0.75em;
       cursor: pointer;
       color: blue;
       text-decoration: underline;
       user-select: none;
-      display: none;
     }
 
-    .msg.show-ts .retract-btn {
-      display: inline-block;
+    #messageForm {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #messageInput {
+      flex-grow: 1;
+      padding: 8px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    #messageForm button {
+      padding: 8px 16px;
+      font-size: 1em;
+      border: none;
+      border-radius: 4px;
+      background-color: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    #messageForm button:hover {
+      background-color: #555;
     }
   </style>
 </head>
@@ -113,8 +126,6 @@
   </div>
 
   <script>
-    const API_BASE = 'https://chat-backend.rsmilga08.workers.dev';
-
     const username = sessionStorage.getItem('username');
     const userId = parseInt(sessionStorage.getItem('user_id'));
     if (!username || !userId) {
@@ -124,24 +135,15 @@
     let currentConvoId = null;
 
     // Load conversations for logged-in user
-    fetch(`${API_BASE}/getConversations`, {
+    fetch('/getConversations', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      mode: 'cors',
-      credentials: 'omit',
       body: JSON.stringify({ user_id: userId })
     })
-    .then(r => {
-      if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-      return r.json();
-    })
+    .then(r => r.json())
     .then(data => {
       if (data.error) {
-        const convDiv = document.getElementById('conversations');
-        const p = document.createElement('p');
-        p.style.color = 'red';
-        p.textContent = 'Error fetching conversations: ' + data.error;
-        convDiv.appendChild(p);
+        alert('Error fetching conversations: ' + data.error);
         return;
       }
       const list = document.getElementById('convoList');
@@ -159,32 +161,25 @@
       });
     })
     .catch(err => {
-      const convDiv = document.getElementById('conversations');
-      const p = document.createElement('p');
-      p.textContent = 'Failed to load conversations';
-      convDiv.appendChild(p);
+      alert('Failed to load conversations');
       console.error(err);
     });
 
+    // Load messages for selected conversation
     function loadMessages(convoId, showLoading = true) {
       currentConvoId = convoId;
       const mdiv = document.getElementById('messages');
-      
+
       if (showLoading) {
         mdiv.textContent = 'Loading messages...';
       }
 
-      fetch(`${API_BASE}/getMessages`, {
+      fetch('/getMessages', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        mode: 'cors',
-        credentials: 'omit',
         body: JSON.stringify({ convo_id: convoId })
       })
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.json())
       .then(data => {
         if (data.error) {
           alert('Error fetching messages: ' + data.error);
@@ -200,59 +195,48 @@
           const d = document.createElement('div');
           d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
 
-          d.dataset.retracted = msg.retracted ? 'true' : 'false';
-          d.dataset.originalMessage = msg.message;
-          d.dataset.messageId = msg.message_id;
-          d.dataset.userId = msg.user_id;
+          // Show "retracted" or message text
+          d.textContent = msg.retracted ? 'retracted' : msg.message;
 
-          d.textContent = '';
-
-          if (msg.retracted) {
-            d.appendChild(document.createTextNode('retracted'));
-          } else {
-            d.textContent = msg.message;
-          }
-
-          // Original message below retracted text
-          if (msg.retracted) {
-            const origMsgDiv = document.createElement('div');
-            origMsgDiv.className = 'orig-msg';
-            origMsgDiv.textContent = msg.message;
-            d.appendChild(origMsgDiv);
-          }
-
-          // Timestamp after original message
+          // Timestamp div (hidden by default)
           const ts = document.createElement('div');
           ts.className = 'timestamp';
           ts.textContent = new Date(msg.timestamp).toLocaleString();
+
+          // Append timestamp below text or 'retracted'
           d.appendChild(ts);
 
-          // Retract/unretract button if current user's message
-          if (msg.user_id === userId) {
-            const btn = document.createElement('span');
-            btn.className = 'retract-btn';
-            btn.textContent = msg.retracted ? 'Unretract' : 'Retract';
-            btn.onclick = (ev) => {
-              ev.stopPropagation();
-              toggleRetract(
-                msg.message_id,
-                msg.retracted,
-                d,
-                msg.message,
-                btn
-              );
-            };
-            d.appendChild(btn);
-          }
-
           d.onclick = () => {
-            const isShown = d.classList.toggle('show-ts');
-            if (!msg.retracted) {
-              // Non-retracted: toggle timestamp only
-              const ts = d.querySelector('.timestamp');
-              ts.style.display = isShown ? 'block' : 'none';
+            d.classList.toggle('show-ts');
+
+            // Remove existing original message div or retract button if any
+            const existingOrig = d.querySelector('.orig-msg');
+            if (existingOrig) existingOrig.remove();
+
+            const existingBtn = d.querySelector('.retract-btn');
+            if (existingBtn) existingBtn.remove();
+
+            if (msg.retracted && d.classList.contains('show-ts')) {
+              // Show original message below "retracted"
+              const origMsgDiv = document.createElement('div');
+              origMsgDiv.className = 'orig-msg';
+              origMsgDiv.style.fontStyle = 'italic';
+              origMsgDiv.style.marginTop = '4px';
+              origMsgDiv.textContent = msg.message;
+              d.appendChild(origMsgDiv);
             }
-            // For retracted: CSS handles showing orig-msg, timestamp, button on .show-ts
+
+            if (msg.user_id === userId && d.classList.contains('show-ts')) {
+              // Show retract/unretract button
+              const btn = document.createElement('span');
+              btn.className = 'retract-btn';
+              btn.textContent = msg.retracted ? 'Unretract' : 'Retract';
+              btn.onclick = ev => {
+                ev.stopPropagation();
+                toggleRetract(msg.message_id, msg.retracted, d, msg.message, btn);
+              };
+              d.appendChild(btn);
+            }
           };
 
           mdiv.appendChild(d);
@@ -261,90 +245,85 @@
         mdiv.scrollTop = mdiv.scrollHeight;
       })
       .catch(err => {
-        alert('Failed to load messages: ' + err.message);
+        alert('Failed to load messages');
         console.error(err);
       });
     }
 
+    // Toggle retract/unretract message
     function toggleRetract(message_id, currentFlag, messageDiv, originalMessage, button) {
-      fetch(`${API_BASE}/toggleRetract`, {
+      fetch('/toggleRetract', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        mode: 'cors',
-        credentials: 'omit',
         body: JSON.stringify({ message_id, retracted: currentFlag })
       })
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.json())
       .then(res => {
         if (res.success) {
-          const newFlag = res.newFlag;
-          messageDiv.dataset.retracted = newFlag ? 'true' : 'false';
+          // Update message text & stored retract flag
+          messageDiv.textContent = res.newFlag ? 'retracted' : originalMessage;
 
-          if (newFlag) {
-            // Retracted
-            messageDiv.childNodes.forEach(child => {
-              if (child.classList) {
-                if (child.classList.contains('orig-msg') || child.classList.contains('timestamp') || child.classList.contains('retract-btn')) {
-                  child.style.display = messageDiv.classList.contains('show-ts') ? 'block' : 'none';
-                }
-              } else if (child.nodeType === Node.TEXT_NODE) {
-                child.textContent = 'retracted';
-              }
-            });
-            button.textContent = 'Unretract';
-          } else {
-            // Unretracted
-            messageDiv.childNodes.forEach(child => {
-              if (child.classList) {
-                if (child.classList.contains('orig-msg') || child.classList.contains('timestamp') || child.classList.contains('retract-btn')) {
-                  child.style.display = 'none';
-                }
-              } else if (child.nodeType === Node.TEXT_NODE) {
-                child.textContent = originalMessage;
-              }
-            });
-            button.textContent = 'Retract';
+          // Append timestamp again
+          const ts = document.createElement('div');
+          ts.className = 'timestamp';
+          // Use current timestamp from original message if you want or keep old one
+          // For simplicity, just show current time here:
+          ts.textContent = new Date().toLocaleString();
+          messageDiv.appendChild(ts);
+
+          // Remove any old original message div
+          const existingOrig = messageDiv.querySelector('.orig-msg');
+          if (existingOrig) existingOrig.remove();
+
+          // If retracted, append original message italicized (only if toggled open)
+          if (res.newFlag && messageDiv.classList.contains('show-ts')) {
+            const origMsgDiv = document.createElement('div');
+            origMsgDiv.className = 'orig-msg';
+            origMsgDiv.style.fontStyle = 'italic';
+            origMsgDiv.style.marginTop = '4px';
+            origMsgDiv.textContent = originalMessage;
+            messageDiv.appendChild(origMsgDiv);
           }
+
+          // Update button text
+          button.textContent = res.newFlag ? 'Unretract' : 'Retract';
+
+          // Update msg.retracted to new value so toggling works properly
+          msg.retracted = res.newFlag;
+
         } else {
           alert('Failed to update message status');
         }
       })
       .catch(err => {
-        alert('Error updating message: ' + err.message);
+        alert('Error updating message');
         console.error(err);
       });
     }
 
+    // Handle sending new message
     document.getElementById('messageForm').addEventListener('submit', e => {
       e.preventDefault();
       const input = document.getElementById('messageInput');
       const text = input.value.trim();
       if (!text || !currentConvoId) return;
 
-      fetch(`${API_BASE}/sendMessage`, {
+      fetch('/sendMessage', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        mode: 'cors',
-        credentials: 'omit',
         body: JSON.stringify({ convo_id: currentConvoId, user_id: userId, message: text })
       })
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.json())
       .then(res => {
         if (res.success) {
           input.value = '';
-          loadMessages(currentConvoId, false);
+          loadMessages(currentConvoId, false); // Don't flash loading text on send
         } else {
           alert('Failed to send message');
         }
       })
       .catch(err => {
-        alert('Error sending message: ' + err.message);
+        alert('Error sending message');
         console.error(err);
       });
     });
