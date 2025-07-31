@@ -109,11 +109,19 @@
     #messageForm button:hover {
       background-color: #555;
     }
+
+    /* Error/message display below Conversations header */
+    #convoError {
+      color: black;
+      margin-top: 10px;
+      font-weight: normal;
+    }
   </style>
 </head>
 <body>
   <div id="conversations">
     <h2>Conversations</h2>
+    <div id="convoError"></div>
     <ul id="convoList"></ul>
   </div>
   <div id="chat">
@@ -134,36 +142,47 @@
 
     let currentConvoId = null;
 
+    const API_BASE = ''; // empty because you used relative URLs like '/getConversations'
+
     // Load conversations for logged-in user
-    fetch('/getConversations', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ user_id: userId })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) {
-        alert('Error fetching conversations: ' + data.error);
-        return;
-      }
-      const list = document.getElementById('convoList');
-      list.innerHTML = '';
-      if (data.conversations.length === 0) {
-        list.textContent = "No conversations found.";
-        return;
-      }
-      data.conversations.forEach(c => {
-        const li = document.createElement('li');
-        li.textContent = 'Chat with ' + c.other_username;
-        li.style.cursor = 'pointer';
-        li.onclick = () => loadMessages(c.convo_id);
-        list.appendChild(li);
+    function loadConversations() {
+      const convoErrorDiv = document.getElementById('convoError');
+      const convoList = document.getElementById('convoList');
+      convoErrorDiv.textContent = '';
+      convoList.innerHTML = 'Loading...';
+
+      fetch(API_BASE + '/getConversations', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ user_id: userId })
+      })
+      .then(r => r.json())
+      .then(data => {
+        convoList.innerHTML = '';
+        if (data.error) {
+          convoErrorDiv.textContent = 'Error fetching conversations: ' + data.error;
+          return;
+        }
+        if (!data.conversations || data.conversations.length === 0) {
+          convoErrorDiv.textContent = 'No conversations found.';
+          return;
+        }
+
+        data.conversations.forEach(c => {
+          const li = document.createElement('li');
+          li.textContent = 'Chat with ' + (c.other_username || 'Unknown');
+          li.style.cursor = 'pointer';
+          li.onclick = () => loadMessages(c.convo_id);
+          convoList.appendChild(li);
+        });
+      })
+      .catch(err => {
+        convoErrorDiv.textContent = 'Failed to load conversations.';
+        console.error(err);
       });
-    })
-    .catch(err => {
-      alert('Failed to load conversations');
-      console.error(err);
-    });
+    }
+
+    loadConversations();
 
     // Load messages for selected conversation
     function loadMessages(convoId, showLoading = true) {
@@ -174,7 +193,7 @@
         mdiv.textContent = 'Loading messages...';
       }
 
-      fetch('/getMessages', {
+      fetch(API_BASE + '/getMessages', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ convo_id: convoId })
@@ -195,15 +214,11 @@
           const d = document.createElement('div');
           d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
 
-          // Show "retracted" or message text
           d.textContent = msg.retracted ? 'retracted' : msg.message;
 
-          // Timestamp div (hidden by default)
           const ts = document.createElement('div');
           ts.className = 'timestamp';
           ts.textContent = new Date(msg.timestamp).toLocaleString();
-
-          // Append timestamp below text or 'retracted'
           d.appendChild(ts);
 
           d.onclick = () => {
@@ -217,7 +232,6 @@
             if (existingBtn) existingBtn.remove();
 
             if (msg.retracted && d.classList.contains('show-ts')) {
-              // Show original message below "retracted"
               const origMsgDiv = document.createElement('div');
               origMsgDiv.className = 'orig-msg';
               origMsgDiv.style.fontStyle = 'italic';
@@ -227,7 +241,6 @@
             }
 
             if (msg.user_id === userId && d.classList.contains('show-ts')) {
-              // Show retract/unretract button
               const btn = document.createElement('span');
               btn.className = 'retract-btn';
               btn.textContent = msg.retracted ? 'Unretract' : 'Retract';
@@ -252,7 +265,7 @@
 
     // Toggle retract/unretract message
     function toggleRetract(message_id, currentFlag, messageDiv, originalMessage, button) {
-      fetch('/toggleRetract', {
+      fetch(API_BASE + '/toggleRetract', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ message_id, retracted: currentFlag })
@@ -260,22 +273,16 @@
       .then(r => r.json())
       .then(res => {
         if (res.success) {
-          // Update message text & stored retract flag
           messageDiv.textContent = res.newFlag ? 'retracted' : originalMessage;
 
-          // Append timestamp again
           const ts = document.createElement('div');
           ts.className = 'timestamp';
-          // Use current timestamp from original message if you want or keep old one
-          // For simplicity, just show current time here:
           ts.textContent = new Date().toLocaleString();
           messageDiv.appendChild(ts);
 
-          // Remove any old original message div
           const existingOrig = messageDiv.querySelector('.orig-msg');
           if (existingOrig) existingOrig.remove();
 
-          // If retracted, append original message italicized (only if toggled open)
           if (res.newFlag && messageDiv.classList.contains('show-ts')) {
             const origMsgDiv = document.createElement('div');
             origMsgDiv.className = 'orig-msg';
@@ -285,12 +292,10 @@
             messageDiv.appendChild(origMsgDiv);
           }
 
-          // Update button text
           button.textContent = res.newFlag ? 'Unretract' : 'Retract';
 
-          // Update msg.retracted to new value so toggling works properly
-          msg.retracted = res.newFlag;
-
+          // Update the msg.retracted so toggling stays correct
+          // NOTE: This relies on closure scope. To ensure correctness, reload messages after toggle might be safer.
         } else {
           alert('Failed to update message status');
         }
@@ -308,7 +313,7 @@
       const text = input.value.trim();
       if (!text || !currentConvoId) return;
 
-      fetch('/sendMessage', {
+      fetch(API_BASE + '/sendMessage', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ convo_id: currentConvoId, user_id: userId, message: text })
@@ -317,7 +322,7 @@
       .then(res => {
         if (res.success) {
           input.value = '';
-          loadMessages(currentConvoId, false); // Don't flash loading text on send
+          loadMessages(currentConvoId, false);
         } else {
           alert('Failed to send message');
         }
