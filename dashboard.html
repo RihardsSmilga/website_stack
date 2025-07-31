@@ -146,42 +146,42 @@
 
     // Load conversations for logged-in user
     function loadConversations() {
-      const convoErrorDiv = document.getElementById('convoError');
-      const convoList = document.getElementById('convoList');
-      convoErrorDiv.textContent = '';
-      convoList.innerHTML = 'Loading...';
+  const convoErrorDiv = document.getElementById('convoError');
+  const convoList = document.getElementById('convoList');
+  convoErrorDiv.textContent = '';
+  convoList.innerHTML = 'Loading...';
 
-      fetch(API_BASE + '/getConversations', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: userId })
-      })
-      .then(r => r.json())
-      .then(data => {
-        convoList.innerHTML = '';
-        if (data.error) {
-          convoErrorDiv.textContent = 'Error fetching conversations: ' + data.error;
-          return;
-        }
-        if (!data.conversations || data.conversations.length === 0) {
-          convoErrorDiv.textContent = 'No conversations found.';
-          return;
-        }
-
-        data.conversations.forEach(c => {
-          const li = document.createElement('li');
-          li.textContent = 'Chat with ' + (c.other_username || 'Unknown');
-          li.style.cursor = 'pointer';
-          li.onclick = () => loadMessages(c.convo_id);
-          convoList.appendChild(li);
-        });
-      })
-      .catch(err => {
-        convoErrorDiv.textContent = 'Failed to load conversations.';
-        console.error(err);
-      });
+  fetch('/getConversations', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ user_id: userId })
+  })
+  .then(r => r.json())
+  .then(data => {
+    console.log('Conversations API response:', data);  // <<-- DEBUG LOG
+    convoList.innerHTML = '';
+    if (data.error) {
+      convoErrorDiv.textContent = 'Error fetching conversations: ' + data.error;
+      return;
+    }
+    if (!data.conversations || data.conversations.length === 0) {
+      convoErrorDiv.textContent = 'No conversations found.';
+      return;
     }
 
+    data.conversations.forEach(c => {
+      const li = document.createElement('li');
+      li.textContent = 'Chat with ' + (c.other_username || 'Unknown');
+      li.style.cursor = 'pointer';
+      li.onclick = () => loadMessages(c.convo_id);
+      convoList.appendChild(li);
+    });
+  })
+  .catch(err => {
+    convoErrorDiv.textContent = 'Failed to load conversations.';
+    console.error('Fetch error:', err);
+  });
+}
     loadConversations();
 
     // Load messages for selected conversation
