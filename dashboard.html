@@ -173,8 +173,7 @@
     .catch(err => {
       const convDiv = document.getElementById('conversations');
       const p = document.createElement('p');
-      p.style.color = 'red';
-      p.textContent = 'Failed to load conversations: ' + err.message;
+      p.textContent = 'Failed to load conversations';
       convDiv.appendChild(p);
       console.error(err);
     });
