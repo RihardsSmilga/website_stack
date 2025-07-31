@@ -125,6 +125,8 @@
   </div>
 
   <script>
+    const API_BASE = 'https://ancient-silence-14d1.rsmilga08.workers.dev';
+
     const username = sessionStorage.getItem('username');
     const userId = parseInt(sessionStorage.getItem('user_id'));
     if (!username || !userId) {
@@ -134,7 +136,7 @@
     let currentConvoId = null;
 
     // Load conversations for logged-in user
-    fetch('/getConversations', {
+    fetch(`${API_BASE}/getConversations`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ user_id: userId })
@@ -173,7 +175,7 @@
         mdiv.textContent = 'Loading messages...';
       }
 
-      fetch('/getMessages', {
+      fetch(`${API_BASE}/getMessages`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ convo_id: convoId })
@@ -245,7 +247,7 @@
 
     // Toggle retract/unretract message
     function toggleRetract(message_id, currentFlag, messageDiv, originalMessage, button) {
-      fetch('/toggleRetract', {
+      fetch(`${API_BASE}/toggleRetract`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ message_id, retracted: currentFlag })
@@ -288,7 +290,7 @@
       const text = input.value.trim();
       if (!text || !currentConvoId) return;
 
-      fetch('/sendMessage', {
+      fetch(`${API_BASE}/sendMessage`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ convo_id: currentConvoId, user_id: userId, message: text })
