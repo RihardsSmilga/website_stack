@@ -2,56 +2,6 @@
 <html>
 <head>
   <title>Login</title>
-  <script>
-    const API_BASE = '	chat-backend.rsmilga08.workers.dev';
-
-    async function login() {
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-      const errorEl = document.getElementById('error');
-      const debugEl = document.getElementById('debug');
-      
-      errorEl.textContent = '';
-      debugEl.textContent = 'Attempting login...';
-
-      try {
-        console.log('Starting login for:', username);
-        const startTime = Date.now();
-        
-        const response = await fetch(`${API_BASE}/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-
-        const data = await response.json();
-        console.log('Login response:', data);
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Login failed');
-        }
-
-        debugEl.textContent = `Login successful in ${Date.now() - startTime}ms`;
-        sessionStorage.setItem('user_id', data.user_id);
-        sessionStorage.setItem('username', data.username);
-        
-        // Redirect logic
-        window.location.href = data.username === 'Ilona' 
-          ? 'interim.html' 
-          : 'dashboard.html';
-
-      } catch (err) {
-        console.error('Login error:', err);
-        errorEl.textContent = err.message;
-        debugEl.textContent = `Error: ${err.message}`;
-      }
-    }
-
-    document.getElementById('loginForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      login();
-    });
-  </script>
 </head>
 <body>
   <h1>Login</h1>
@@ -61,6 +11,43 @@
     <button type="submit">Login</button>
   </form>
   <div id="error" style="color: red;"></div>
-  <div id="debug" style="color: blue;"></div>
+
+  <script>
+    const API_BASE = 'https://chat-backend.rsmilga08.workers.dev';
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+
+      try {
+        const response = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          errorEl.textContent = data.error;
+          return;
+        }
+
+        sessionStorage.setItem('username', data.username);
+        sessionStorage.setItem('user_id', data.user_id);
+        
+        if (data.username === "Ilona") {
+          window.location.href = 'interim.html';
+        } else {
+          window.location.href = 'dashboard.html';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Login failed. Please try again.';
+      }
+    });
+  </script>
 </body>
 </html>
