@@ -5,110 +5,110 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat Dashboard</title>
   <style>
+    /* RESTORED YOUR ORIGINAL CSS */
     body {
       font-family: Arial, sans-serif;
       display: flex;
       height: 100vh;
       margin: 0;
-      background-color: #f5f5f5;
     }
 
     #conversations {
       width: 25%;
       border-right: 1px solid #ccc;
-      padding: 20px;
+      padding: 10px;
       overflow-y: auto;
-      background-color: white;
     }
 
     #messages {
       width: 75%;
-      padding: 20px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
-      background-color: #f9f9f9;
     }
 
     #messageList {
       flex: 1;
       overflow-y: auto;
-      margin-bottom: 20px;
-      padding: 10px;
-      background-color: white;
-      border-radius: 5px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 10px;
     }
 
-    .user-item {
-      padding: 10px;
-      margin: 5px 0;
-      cursor: pointer;
+    .message-box {
+      padding: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 6px;
       border-radius: 4px;
+      cursor: pointer;
     }
 
-    .user-item:hover {
-      background-color: #e9e9e9;
+    .timestamp {
+      font-size: 0.8em;
+      color: gray;
     }
 
-    .user-item.active {
-      background-color: #d4e6ff;
-    }
-
-    #noConvoSelected {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #888;
-      font-size: 1.2em;
+    .hidden {
+      display: none;
     }
 
     #inputSection {
       display: flex;
+      align-items: center;
       gap: 10px;
-      padding: 10px;
-      background-color: white;
-      border-radius: 5px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
 
     #messageInput {
       flex: 1;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 8px;
+      font-size: 1em;
     }
 
     #sendButton {
-      padding: 10px 20px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+      padding: 8px 16px;
     }
 
-    #sendButton:hover {
-      background-color: #45a049;
+    .retract-btn {
+      margin-top: 5px;
+      font-size: 0.75em;
+      padding: 2px 5px;
     }
 
     #noConvos {
-      margin-top: 20px;
-      color: #888;
+      margin-top: 10px;
+      color: black;
       font-style: italic;
+    }
+
+    /* NEW STYLES FOR YOUR REQUESTED CHANGES */
+    #currentChatUser {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+
+    .user-message {
+      background-color: #f1f1f1;
+      align-self: flex-start;
+      max-width: 70%;
+    }
+
+    .my-message {
+      background-color: #e3f2fd;
+      align-self: flex-end;
+      max-width: 70%;
     }
   </style>
 </head>
 <body>
   <div id="conversations">
-    <h2>Available Users</h2>
+    <h3>Conversations</h3>
     <div id="convoList"></div>
     <div id="noConvos" class="hidden">No users found.</div>
   </div>
 
   <div id="messages">
+    <div id="currentChatUser"></div>
+    <div id="messageList"></div>
     <div id="noConvoSelected">No conversation selected</div>
-    <div id="messageList" class="hidden"></div>
     <div id="inputSection" class="hidden">
       <input type="text" id="messageInput" placeholder="Type your message...">
       <button id="sendButton">Send</button>
@@ -120,8 +120,8 @@
     const userId = parseInt(sessionStorage.getItem('user_id'), 10);
     const username = sessionStorage.getItem('username');
     let currentConvo = null;
+    let currentChatUser = null;
 
-    // Load available users to chat with
     async function loadAvailableUsers() {
       try {
         const res = await fetch(`${apiBase}/getUsers`, {
@@ -136,40 +136,31 @@
         const convoList = document.getElementById('convoList');
         convoList.innerHTML = '';
         
-        if (data.users.length === 0) {
+        if (data.users && data.users.length > 0) {
+          document.getElementById('noConvos').classList.add('hidden');
+          data.users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.textContent = user.username;
+            userElement.style.padding = '5px';
+            userElement.style.cursor = 'pointer';
+            userElement.onclick = () => {
+              currentChatUser = user.username;
+              document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
+              loadOrCreateConversation(user.user_id);
+            };
+            convoList.appendChild(userElement);
+          });
+        } else {
           document.getElementById('noConvos').classList.remove('hidden');
-          return;
         }
-
-        document.getElementById('noConvos').classList.add('hidden');
-        
-        data.users.forEach(user => {
-          const userElement = document.createElement('div');
-          userElement.className = 'user-item';
-          userElement.textContent = user.username;
-          userElement.onclick = () => {
-            // Remove active class from all users
-            document.querySelectorAll('.user-item').forEach(el => {
-              el.classList.remove('active');
-            });
-            // Add active class to clicked user
-            userElement.classList.add('active');
-            
-            // Load conversation with this user
-            loadOrCreateConversation(user.user_id);
-          };
-          convoList.appendChild(userElement);
-        });
       } catch (err) {
         console.error('Error loading users:', err);
         document.getElementById('noConvos').classList.remove('hidden');
       }
     }
 
-    // Load or create conversation between current user and selected user
     async function loadOrCreateConversation(otherUserId) {
       try {
-        // First try to find existing conversation
         const res = await fetch(`${apiBase}/findOrCreateConvo`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -181,12 +172,10 @@
         const data = await res.json();
         currentConvo = data.convo_id;
         
-        // Show message area
+        // Hide "no conversation selected" and show chat
         document.getElementById('noConvoSelected').classList.add('hidden');
-        document.getElementById('messageList').classList.remove('hidden');
         document.getElementById('inputSection').classList.remove('hidden');
         
-        // Load messages
         loadMessages();
       } catch (err) {
         console.error('Error loading conversation:', err);
@@ -194,7 +183,6 @@
       }
     }
 
-    // Load messages for current conversation
     async function loadMessages() {
       if (!currentConvo) return;
       
@@ -212,27 +200,44 @@
         list.innerHTML = '';
         
         if (data.messages.length === 0) {
-          list.innerHTML = '<div>No messages yet</div>';
           return;
         }
 
         data.messages.forEach(msg => {
           const msgElement = document.createElement('div');
-          msgElement.style.margin = '5px 0';
-          msgElement.style.padding = '8px';
-          msgElement.style.borderRadius = '4px';
-          msgElement.style.backgroundColor = msg.user_id === userId ? '#e3f2fd' : '#f1f1f1';
+          msgElement.className = msg.user_id === userId ? 'my-message message-box' : 'user-message message-box';
           
-          msgElement.innerHTML = `
-            <strong>${msg.user_id === userId ? 'You' : msg.username}:</strong>
-            <div>${msg.message}</div>
-            <small style="color: #666;">${new Date(msg.timestamp).toLocaleString()}</small>
-          `;
+          const messageText = document.createElement('div');
+          messageText.textContent = msg.message;
+          
+          const timestamp = document.createElement('div');
+          timestamp.className = 'timestamp';
+          timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+          
+          msgElement.appendChild(messageText);
+          msgElement.appendChild(timestamp);
+
+          if (msg.user_id === userId) {
+            const retractBtn = document.createElement('button');
+            retractBtn.className = 'retract-btn';
+            retractBtn.textContent = msg.retracted ? 'Unretract' : 'Retract';
+            retractBtn.onclick = async () => {
+              await fetch(`${apiBase}/toggleRetract`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  message_id: msg.message_id, 
+                  retracted: msg.retracted 
+                })
+              });
+              loadMessages();
+            };
+            msgElement.appendChild(retractBtn);
+          }
           
           list.appendChild(msgElement);
         });
         
-        // Scroll to bottom
         list.scrollTop = list.scrollHeight;
       } catch (err) {
         console.error('Error loading messages:', err);
