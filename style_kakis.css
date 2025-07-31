@@ -1,0 +1,17 @@
+.image-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px;
+  max-width: 100%;
+}
+
+.image-container img {
+  width: 100%;
+  max-width: 300px;  /* ⬆️ Increased from 200px to 300px */
+  height: auto;
+  object-fit: cover;
+  border-radius: 0;   /* Keep edges sharp */
+}

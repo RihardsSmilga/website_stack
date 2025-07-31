@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chat Dashboard</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      background-color: white;
+      color: black;
+    }
+
+    #conversations {
+      width: 25%;
+      border-right: 1px solid #ccc;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    #chat {
+      width: 75%;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    #messages {
+      flex-grow: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .msg {
+      margin: 5px 0;
+      padding: 5px 10px;
+      max-width: 60%;
+      word-wrap: break-word;
+      border-radius: 6px;
+      position: relative;
+      user-select: none;
+    }
+
+    .you {
+      align-self: flex-end;
+      text-align: right;
+      background-color: #eee;
+    }
+
+    .other {
+      align-self: flex-start;
+      text-align: left;
+      background-color: #ddd;
+    }
+
+    .msg:hover {
+      cursor: pointer;
+      background-color: #f0f0f0;
+    }
+
+    .timestamp {
+      font-size: 0.75em;
+      color: #555;
+      display: none;
+      margin-top: 4px;
+    }
+
+    .msg.show-ts .timestamp {
+      display: block;
+    }
+
+    .retract-btn {
+      margin-left: 8px;
+      font-size: 0.75em;
+      cursor: pointer;
+      color: blue;
+      text-decoration: underline;
+    }
+
+    #messageForm {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #messageInput {
+      flex-grow: 1;
+      padding: 8px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    #messageForm button {
+      padding: 8px 16px;
+      font-size: 1em;
+      border: none;
+      border-radius: 4px;
+      background-color: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    #messageForm button:hover {
+      background-color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="conversations">
+    <h2>Conversations</h2>
+    <ul id="convoList"></ul>
+  </div>
+  <div id="chat">
+    <h2>Chat</h2>
+    <div id="messages">Select a conversation...</div>
+    <form id="messageForm">
+      <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off" required />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const username = sessionStorage.getItem('username');
+    const userId = parseInt(sessionStorage.getItem('user_id'));
+    if (!username || !userId) {
+      location.href = 'index.html';
+    }
+
+    let currentConvoId = null;
+
+    // Load conversations for logged-in user
+    fetch('/getConversations', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ user_id: userId })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert('Error fetching conversations: ' + data.error);
+        return;
+      }
+      const list = document.getElementById('convoList');
+      list.innerHTML = '';
+      if (data.conversations.length === 0) {
+        list.textContent = "No conversations found.";
+        return;
+      }
+      data.conversations.forEach(c => {
+        const li = document.createElement('li');
+        li.textContent = 'Chat with ' + c.other_username;
+        li.style.cursor = 'pointer';
+        li.onclick = () => loadMessages(c.convo_id);
+        list.appendChild(li);
+      });
+    })
+    .catch(err => {
+      alert('Failed to load conversations');
+      console.error(err);
+    });
+
+    // Load messages for selected conversation
+    function loadMessages(convoId, showLoading = true) {
+      currentConvoId = convoId;
+      const mdiv = document.getElementById('messages');
+      
+      if (showLoading) {
+        mdiv.textContent = 'Loading messages...';
+      }
+
+      fetch('/getMessages', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ convo_id: convoId })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          alert('Error fetching messages: ' + data.error);
+          return;
+        }
+        mdiv.innerHTML = '';
+        if (data.messages.length === 0) {
+          mdiv.textContent = 'No messages yet.';
+          return;
+        }
+
+        data.messages.forEach(msg => {
+          const d = document.createElement('div');
+          d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
+          d.textContent = msg.retracted ? 'retracted' : msg.message;
+
+          // Timestamp div (hidden by default)
+          const ts = document.createElement('div');
+          ts.className = 'timestamp';
+          ts.textContent = new Date(msg.timestamp).toLocaleString();
+          d.appendChild(ts);
+
+          // Click toggles timestamp visibility and retract button
+          d.onclick = () => {
+            d.classList.toggle('show-ts');
+            // Remove existing retract button if any
+            const existingBtn = d.querySelector('.retract-btn');
+            if (existingBtn) existingBtn.remove();
+
+            // Show original message when clicking a retracted message for either user
+            if (msg.retracted && d.classList.contains('show-ts')) {
+              // Show original message below "retracted"
+              const origMsgDiv = document.createElement('div');
+              origMsgDiv.style.fontStyle = 'italic';
+              origMsgDiv.style.marginTop = '4px';
+              origMsgDiv.textContent = msg.message;
+              d.appendChild(origMsgDiv);
+            }
+
+            // Only show retract/unretract option if this message was sent by logged-in user
+            if (msg.user_id === userId && d.classList.contains('show-ts')) {
+              const btn = document.createElement('span');
+              btn.className = 'retract-btn';
+              btn.textContent = msg.retracted ? 'Unretract' : 'Retract';
+              btn.onclick = (ev) => {
+                ev.stopPropagation();
+                toggleRetract(msg.message_id, msg.retracted, d, msg.message, btn);
+              };
+              d.appendChild(btn);
+            }
+          };
+
+          mdiv.appendChild(d);
+        });
+
+        // Scroll to bottom on load
+        mdiv.scrollTop = mdiv.scrollHeight;
+      })
+      .catch(err => {
+        alert('Failed to load messages');
+        console.error(err);
+      });
+    }
+
+    // Toggle retract/unretract message
+    function toggleRetract(message_id, currentFlag, messageDiv, originalMessage, button) {
+      fetch('/toggleRetract', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ message_id, retracted: currentFlag })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          // Update message text
+          const ts = messageDiv.querySelector('.timestamp');
+          messageDiv.textContent = res.newFlag ? 'retracted' : originalMessage;
+          messageDiv.appendChild(ts);
+
+          // If retracted, append original message italicized
+          if (res.newFlag) {
+            const origMsgDiv = document.createElement('div');
+            origMsgDiv.style.fontStyle = 'italic';
+            origMsgDiv.style.marginTop = '4px';
+            origMsgDiv.textContent = originalMessage;
+            messageDiv.appendChild(origMsgDiv);
+          }
+
+          // Update button text and msg.retracted value
+          button.textContent = res.newFlag ? 'Unretract' : 'Retract';
+          // Update currentFlag so the button toggles correctly
+          currentFlag = res.newFlag;
+        } else {
+          alert('Failed to update message status');
+        }
+      })
+      .catch(err => {
+        alert('Error updating message');
+        console.error(err);
+      });
+    }
+
+    // Handle sending new message
+    document.getElementById('messageForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const input = document.getElementById('messageInput');
+      const text = input.value.trim();
+      if (!text || !currentConvoId) return;
+
+      fetch('/sendMessage', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ convo_id: currentConvoId, user_id: userId, message: text })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          input.value = '';
+          loadMessages(currentConvoId, false); // Don't flash loading text on send
+        } else {
+          alert('Failed to send message');
+        }
+      })
+      .catch(err => {
+        alert('Error sending message');
+        console.error(err);
+      });
+    });
+  </script>
+</body>
+</html>
