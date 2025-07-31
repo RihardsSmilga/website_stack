@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat Dashboard</title>
   <style>
-    /* RESTORED YOUR ORIGINAL CSS */
     body {
       font-family: Arial, sans-serif;
       display: flex;
@@ -31,19 +30,48 @@
       flex: 1;
       overflow-y: auto;
       margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
     }
 
-    .message-box {
+    .message-container {
+      display: flex;
+      margin-bottom: 6px;
+    }
+
+    .user-message {
+      align-self: flex-start;
+      max-width: 70%;
+      cursor: pointer;
+    }
+
+    .my-message {
+      align-self: flex-end;
+      max-width: 70%;
+      cursor: pointer;
+    }
+
+    .message-content {
       padding: 8px;
       border: 1px solid #ccc;
-      margin-bottom: 6px;
       border-radius: 4px;
-      cursor: pointer;
     }
 
     .timestamp {
       font-size: 0.8em;
       color: gray;
+      display: none;
+      margin-top: 5px;
+    }
+
+    .retract-btn {
+      display: none;
+      font-size: 0.75em;
+      padding: 2px 5px;
+      margin-top: 5px;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      cursor: pointer;
     }
 
     .hidden {
@@ -64,12 +92,10 @@
 
     #sendButton {
       padding: 8px 16px;
-    }
-
-    .retract-btn {
-      margin-top: 5px;
-      font-size: 0.75em;
-      padding: 2px 5px;
+      background-color: black;
+      color: white;
+      border: none;
+      cursor: pointer;
     }
 
     #noConvos {
@@ -78,23 +104,10 @@
       font-style: italic;
     }
 
-    /* NEW STYLES FOR YOUR REQUESTED CHANGES */
     #currentChatUser {
       font-size: 1.2em;
       margin-bottom: 10px;
       font-weight: bold;
-    }
-
-    .user-message {
-      background-color: #f1f1f1;
-      align-self: flex-start;
-      max-width: 70%;
-    }
-
-    .my-message {
-      background-color: #e3f2fd;
-      align-self: flex-end;
-      max-width: 70%;
     }
   </style>
 </head>
@@ -172,9 +185,9 @@
         const data = await res.json();
         currentConvo = data.convo_id;
         
-        // Hide "no conversation selected" and show chat
         document.getElementById('noConvoSelected').classList.add('hidden');
         document.getElementById('inputSection').classList.remove('hidden');
+        document.getElementById('messageList').classList.remove('hidden');
         
         loadMessages();
       } catch (err) {
@@ -204,24 +217,29 @@
         }
 
         data.messages.forEach(msg => {
-          const msgElement = document.createElement('div');
-          msgElement.className = msg.user_id === userId ? 'my-message message-box' : 'user-message message-box';
+          const messageContainer = document.createElement('div');
+          messageContainer.className = 'message-container';
           
-          const messageText = document.createElement('div');
-          messageText.textContent = msg.message;
+          const messageElement = document.createElement('div');
+          messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+          
+          const messageContent = document.createElement('div');
+          messageContent.className = 'message-content';
+          messageContent.textContent = msg.message;
           
           const timestamp = document.createElement('div');
           timestamp.className = 'timestamp';
           timestamp.textContent = new Date(msg.timestamp).toLocaleString();
           
-          msgElement.appendChild(messageText);
-          msgElement.appendChild(timestamp);
+          messageElement.appendChild(messageContent);
+          messageElement.appendChild(timestamp);
 
           if (msg.user_id === userId) {
             const retractBtn = document.createElement('button');
             retractBtn.className = 'retract-btn';
             retractBtn.textContent = msg.retracted ? 'Unretract' : 'Retract';
-            retractBtn.onclick = async () => {
+            retractBtn.onclick = async (e) => {
+              e.stopPropagation();
               await fetch(`${apiBase}/toggleRetract`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -232,10 +250,19 @@
               });
               loadMessages();
             };
-            msgElement.appendChild(retractBtn);
+            messageElement.appendChild(retractBtn);
           }
           
-          list.appendChild(msgElement);
+          messageElement.onclick = () => {
+            timestamp.style.display = timestamp.style.display === 'block' ? 'none' : 'block';
+            if (msg.user_id === userId) {
+              const btn = messageElement.querySelector('.retract-btn');
+              btn.style.display = btn.style.display === 'block' ? 'none' : 'block';
+            }
+          };
+          
+          messageContainer.appendChild(messageElement);
+          list.appendChild(messageContainer);
         });
         
         list.scrollTop = list.scrollHeight;
@@ -244,7 +271,6 @@
       }
     }
 
-    // Send message
     document.getElementById('sendButton').onclick = async () => {
       const messageInput = document.getElementById('messageInput');
       const message = messageInput.value.trim();
