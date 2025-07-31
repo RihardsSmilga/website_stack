@@ -72,6 +72,16 @@
       display: block;
     }
 
+    .orig-msg {
+      font-style: italic;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .msg.show-ts .orig-msg {
+      display: block;
+    }
+
     .retract-btn {
       margin-left: 8px;
       font-size: 0.75em;
@@ -79,8 +89,12 @@
       color: blue;
       text-decoration: underline;
       user-select: none;
+      display: none;
     }
 
+    .msg.show-ts .retract-btn {
+      display: inline;
+    }
   </style>
 </head>
 <body>
@@ -185,75 +199,66 @@
           const d = document.createElement('div');
           d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
 
-          // We do NOT set textContent here because of toggling. We'll do it in toggle function below.
-
-          const ts = document.createElement('div');
-          ts.className = 'timestamp';
-          ts.textContent = new Date(msg.timestamp).toLocaleString();
-          d.appendChild(ts);
-
-          // State: initially hidden timestamp & original message for retracted messages
+          // Store data attributes for toggling
           d.dataset.retracted = msg.retracted ? 'true' : 'false';
           d.dataset.originalMessage = msg.message;
           d.dataset.messageId = msg.message_id;
           d.dataset.userId = msg.user_id;
 
-          // Set initial message content depending on retracted
+          // Clear content first
+          d.textContent = '';
+
           if (msg.retracted) {
             d.textContent = 'retracted';
           } else {
             d.textContent = msg.message;
           }
+
+          // Create timestamp div
+          const ts = document.createElement('div');
+          ts.className = 'timestamp';
+          ts.textContent = new Date(msg.timestamp).toLocaleString();
           d.appendChild(ts);
 
-          d.onclick = () => {
-            // Toggle timestamp visibility
-            d.classList.toggle('show-ts');
+          // Create original message div for retracted messages
+          if (msg.retracted) {
+            const origMsgDiv = document.createElement('div');
+            origMsgDiv.className = 'orig-msg';
+            origMsgDiv.textContent = msg.message;
+            d.appendChild(origMsgDiv);
+          }
 
-            // Remove existing retract button and original message if present
-            const existingBtn = d.querySelector('.retract-btn');
-            if (existingBtn) existingBtn.remove();
-            const existingOrigMsgDiv = d.querySelector('.orig-msg');
-            if (existingOrigMsgDiv) existingOrigMsgDiv.remove();
+          // Create retract/unretract button only if message retracted and sent by current user
+          if (msg.retracted && msg.user_id === userId) {
+            const btn = document.createElement('span');
+            btn.className = 'retract-btn';
+            btn.textContent = 'Unretract';
+            btn.onclick = (ev) => {
+              ev.stopPropagation();
+              toggleRetract(
+                msg.message_id,
+                true,
+                d,
+                msg.message,
+                btn
+              );
+            };
+            d.appendChild(btn);
+          }
+
+          d.onclick = () => {
+            const isShown = d.classList.toggle('show-ts');
 
             if (d.dataset.retracted === 'true') {
-              if (d.classList.contains('show-ts')) {
-                // Show retracted + original message + retract button (if sent by current user)
-
-                d.textContent = 'retracted';
-                d.appendChild(ts);
-
-                const origMsgDiv = document.createElement('div');
-                origMsgDiv.className = 'orig-msg';
-                origMsgDiv.style.fontStyle = 'italic';
-                origMsgDiv.style.marginTop = '4px';
-                origMsgDiv.textContent = d.dataset.originalMessage;
-                d.appendChild(origMsgDiv);
-
-                if (parseInt(d.dataset.userId) === userId) {
-                  const btn = document.createElement('span');
-                  btn.className = 'retract-btn';
-                  btn.textContent = 'Unretract';
-                  btn.onclick = (ev) => {
-                    ev.stopPropagation();
-                    toggleRetract(
-                      parseInt(d.dataset.messageId),
-                      true,
-                      d,
-                      d.dataset.originalMessage,
-                      btn
-                    );
-                  };
-                  d.appendChild(btn);
-                }
+              if (isShown) {
+                // Show "retracted" text only — already there
+                // Timestamp, original message, and button become visible by CSS via .show-ts
               } else {
-                // Hide timestamp, original message, retract button; show only 'retracted' text
-                d.textContent = 'retracted';
+                // Hide extras, leave only "retracted" text (no timestamp, original msg, button)
+                // Already handled by CSS & class toggle
               }
             } else {
-              // Not retracted message: just toggle timestamp, message text always visible
-              d.textContent = d.dataset.originalMessage;
-              d.appendChild(ts);
+              // Not retracted: toggle timestamp only, message text always visible
             }
           };
 
@@ -282,27 +287,39 @@
       })
       .then(res => {
         if (res.success) {
-          const ts = messageDiv.querySelector('.timestamp');
           messageDiv.dataset.retracted = res.newFlag ? 'true' : 'false';
 
           if (res.newFlag) {
+            // Retracted: show only "retracted" text, but original, timestamp and button show on click
             messageDiv.textContent = 'retracted';
+
+            // Append timestamp div
+            const ts = document.createElement('div');
+            ts.className = 'timestamp';
+            ts.textContent = new Date().toLocaleString(); // Or use stored timestamp if needed
             messageDiv.appendChild(ts);
 
+            // Original message div
             const origMsgDiv = document.createElement('div');
             origMsgDiv.className = 'orig-msg';
-            origMsgDiv.style.fontStyle = 'italic';
-            origMsgDiv.style.marginTop = '4px';
             origMsgDiv.textContent = originalMessage;
             messageDiv.appendChild(origMsgDiv);
 
             button.textContent = 'Unretract';
             messageDiv.appendChild(button);
+
           } else {
+            // Not retracted: show original message and timestamp, no retract btn by default
             messageDiv.textContent = originalMessage;
+
+            const ts = document.createElement('div');
+            ts.className = 'timestamp';
+            ts.textContent = new Date().toLocaleString(); // Or use stored timestamp if needed
             messageDiv.appendChild(ts);
+
             button.textContent = 'Retract';
-            messageDiv.appendChild(button);
+            button.style.display = 'none'; // Hide button after unretract? Or remove it?
+            // If you want retract button to show on unretracted messages, implement separately.
           }
         } else {
           alert('Failed to update message status');
