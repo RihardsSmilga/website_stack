@@ -211,7 +211,8 @@
         data.messages.forEach(msg => {
           const d = document.createElement('div');
           d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
-          d.textContent = msg.retracted ? 'retracted' : msg.message;
+          // Initially always show the original message text
+          d.textContent = msg.message;
 
           const ts = document.createElement('div');
           ts.className = 'timestamp';
@@ -224,11 +225,18 @@
             if (existingBtn) existingBtn.remove();
 
             if (msg.retracted && d.classList.contains('show-ts')) {
+              // Show "retracted" label plus original message italicized below
+              d.textContent = 'retracted';
+              d.appendChild(ts);
               const origMsgDiv = document.createElement('div');
               origMsgDiv.style.fontStyle = 'italic';
               origMsgDiv.style.marginTop = '4px';
               origMsgDiv.textContent = msg.message;
               d.appendChild(origMsgDiv);
+            } else {
+              // Show original message text normally
+              d.textContent = msg.message;
+              d.appendChild(ts);
             }
 
             if (msg.user_id === userId && d.classList.contains('show-ts')) {
