@@ -2,361 +2,215 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Chat Dashboard</title>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
       display: flex;
       height: 100vh;
       margin: 0;
-      background-color: white;
-      color: black;
     }
 
     #conversations {
       width: 25%;
       border-right: 1px solid #ccc;
+      padding: 10px;
       overflow-y: auto;
-      padding: 20px;
-    }
-
-    #chat {
-      width: 75%;
-      display: flex;
-      flex-direction: column;
-      padding: 20px;
     }
 
     #messages {
-      flex-grow: 1;
-      overflow-y: auto;
+      width: 75%;
+      padding: 10px;
       display: flex;
       flex-direction: column;
     }
 
-    .msg {
-      margin: 5px 0;
-      padding: 5px 10px;
-      max-width: 60%;
-      word-wrap: break-word;
-      border-radius: 6px;
-      position: relative;
-      user-select: none;
-      white-space: pre-wrap;
+    #messageList {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 10px;
     }
 
-    .you {
-      align-self: flex-end;
-      text-align: right;
-      background-color: #eee;
-    }
-
-    .other {
-      align-self: flex-start;
-      text-align: left;
-      background-color: #ddd;
-    }
-
-    .msg:hover {
+    .message-box {
+      padding: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 6px;
+      border-radius: 4px;
       cursor: pointer;
-      background-color: #f0f0f0;
     }
 
     .timestamp {
-      font-size: 0.75em;
-      color: #555;
-      margin-top: 4px;
+      font-size: 0.8em;
+      color: gray;
+    }
+
+    .hidden {
       display: none;
     }
 
-    .msg.show-ts .timestamp {
-      display: block;
-    }
-
-    .orig-msg {
-      font-style: italic;
-      margin-top: 4px;
-      white-space: pre-wrap;
-    }
-
-    .retract-btn {
-      margin-left: 8px;
-      font-size: 0.75em;
-      cursor: pointer;
-      color: blue;
-      text-decoration: underline;
-      user-select: none;
-      display: inline-block;
-      margin-top: 4px;
-    }
-
-    #messageForm {
-      margin-top: 10px;
+    #inputSection {
       display: flex;
-      gap: 10px;
       align-items: center;
+      gap: 10px;
     }
 
     #messageInput {
-      flex-grow: 1;
+      flex: 1;
       padding: 8px;
       font-size: 1em;
-      border: 1px solid #ccc;
-      border-radius: 4px;
     }
 
-    #messageForm button {
+    #sendButton {
       padding: 8px 16px;
-      font-size: 1em;
-      border: none;
-      border-radius: 4px;
-      background-color: #333;
-      color: white;
-      cursor: pointer;
     }
 
-    #messageForm button:hover {
-      background-color: #555;
+    .retract-btn {
+      margin-top: 5px;
+      font-size: 0.75em;
+      padding: 2px 5px;
     }
 
-    /* Error/message display below Conversations header */
-    #convoError {
-      color: black;
+    #noConvos {
       margin-top: 10px;
-      font-weight: normal;
+      color: black;
+      font-style: italic;
     }
   </style>
 </head>
 <body>
   <div id="conversations">
-    <h2>Conversations</h2>
-    <div id="convoError"></div>
-    <ul id="convoList"></ul>
+    <h3>Conversations</h3>
+    <div id="convoList"></div>
+    <div id="noConvos" class="hidden">No conversations found.</div>
   </div>
-  <div id="chat">
-    <h2>Chat</h2>
-    <div id="messages">Select a conversation...</div>
-    <form id="messageForm">
-      <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off" required />
-      <button type="submit">Send</button>
-    </form>
+
+  <div id="messages">
+    <div id="messageList"></div>
+    <div id="inputSection">
+      <input type="text" id="messageInput" placeholder="Type your message..." />
+      <button id="sendButton">Send</button>
+    </div>
   </div>
 
   <script>
-    const username = sessionStorage.getItem('username');
-    const userIdRaw = sessionStorage.getItem('user_id');
-    const userId = userIdRaw ? parseInt(userIdRaw) : null;
+    const apiBase = 'https://your-worker-url.workers.dev'; // Replace with your actual Worker URL
+    const userId = parseInt(localStorage.getItem('user_id'), 10);
+    const username = localStorage.getItem('username');
+    let currentConvo = null;
 
-    if (!username || !userId) {
-      location.href = 'index.html';
+    async function loadConversations() {
+      const res = await fetch(`${apiBase}/getConversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+
+      try {
+        const data = await res.json();
+        const convoList = document.getElementById('convoList');
+        convoList.innerHTML = '';
+        document.getElementById('noConvos').classList.add('hidden');
+
+        if (data.conversations.length === 0) {
+          document.getElementById('noConvos').classList.remove('hidden');
+        }
+
+        data.conversations.forEach(convo => {
+          const btn = document.createElement('button');
+          btn.textContent = convo.other_username;
+          btn.onclick = () => {
+            currentConvo = convo.convo_id;
+            loadMessages();
+          };
+          convoList.appendChild(btn);
+        });
+      } catch (err) {
+        console.error('Failed to parse conversations response.', err);
+      }
     }
 
-    let currentConvoId = null;
-
-    const API_BASE = ''; // Adjust if needed
-
-    // Load conversations for logged-in user
-    function loadConversations() {
-      const convoErrorDiv = document.getElementById('convoError');
-      const convoList = document.getElementById('convoList');
-      convoErrorDiv.textContent = 'chat-backend.rsmilga08.workers.dev';
-      convoList.innerHTML = 'Loading...';
-
-      fetch(API_BASE + '/getConversations', {
+    async function loadMessages() {
+      const res = await fetch(`${apiBase}/getMessages`, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: userId })
-      })
-      .then(r => r.text())
-      .then(text => {
-        try {
-          const data = JSON.parse(text);
-          console.log('Conversations API response:', data);
-          convoList.innerHTML = '';
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ convo_id: currentConvo }),
+      });
 
-          if (data.error) {
-            convoErrorDiv.textContent = 'Error fetching conversations: ' + data.error;
-            return;
-          }
-          if (!data.conversations || data.conversations.length === 0) {
-            convoErrorDiv.textContent = 'No conversations found.';
-            return;
-          }
+      const data = await res.json();
+      const list = document.getElementById('messageList');
+      list.innerHTML = '';
 
-          data.conversations.forEach(c => {
-            const li = document.createElement('li');
-            li.textContent = 'Chat with ' + (c.other_username || 'Unknown');
-            li.style.cursor = 'pointer';
-            li.onclick = () => loadMessages(c.convo_id);
-            convoList.appendChild(li);
-          });
-        } catch(e) {
-          convoErrorDiv.textContent = 'Failed to parse conversations response.';
-          console.error('Parsing error:', e, 'Response text:', text);
-          convoList.innerHTML = '';
+      data.messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message-box';
+
+        const isUser = msg.user_id === userId;
+        const messageText = document.createElement('div');
+        const timestamp = document.createElement('div');
+        timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+        timestamp.className = 'timestamp hidden';
+
+        if (msg.retracted) {
+          messageText.textContent = 'retracted';
+          const original = document.createElement('div');
+          original.textContent = msg.message;
+          original.className = 'hidden';
+
+          div.appendChild(messageText);
+          div.appendChild(original);
+          div.appendChild(timestamp);
+
+          div.onclick = () => {
+            original.classList.toggle('hidden');
+            timestamp.classList.toggle('hidden');
+          };
+        } else {
+          messageText.textContent = msg.message;
+          div.appendChild(messageText);
+          div.appendChild(timestamp);
+
+          div.onclick = () => {
+            timestamp.classList.toggle('hidden');
+          };
         }
-      })
-      .catch(err => {
-        convoErrorDiv.textContent = 'Failed to load conversations.';
-        console.error('Fetch error:', err);
-        convoList.innerHTML = '';
+
+        if (isUser) {
+          const retractBtn = document.createElement('button');
+          retractBtn.textContent = msg.retracted ? 'Unretract' : 'Retract';
+          retractBtn.className = 'retract-btn';
+          retractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await fetch(`${apiBase}/toggleRetract`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message_id: msg.message_id, retracted: msg.retracted }),
+            });
+            loadMessages();
+          };
+          div.appendChild(retractBtn);
+        }
+
+        list.appendChild(div);
       });
     }
+
+    document.getElementById('sendButton').onclick = async () => {
+      const messageInput = document.getElementById('messageInput');
+      const message = messageInput.value.trim();
+      if (!message || currentConvo === null) return;
+
+      await fetch(`${apiBase}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ convo_id: currentConvo, user_id: userId, message }),
+      });
+
+      messageInput.value = '';
+      loadMessages();
+    };
 
     loadConversations();
-
-    // Load messages for selected conversation
-    function loadMessages(convoId, showLoading = true) {
-      currentConvoId = convoId;
-      const mdiv = document.getElementById('messages');
-
-      if (showLoading) {
-        mdiv.textContent = 'Loading messages...';
-      }
-
-      fetch(API_BASE + '/getMessages', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ convo_id: convoId })
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          alert('Error fetching messages: ' + data.error);
-          return;
-        }
-        mdiv.innerHTML = '';
-        if (data.messages.length === 0) {
-          mdiv.textContent = 'No messages yet.';
-          return;
-        }
-
-        data.messages.forEach(msg => {
-          const d = document.createElement('div');
-          d.className = 'msg ' + (msg.user_id === userId ? 'you' : 'other');
-
-          d.textContent = msg.retracted ? 'retracted' : msg.message;
-
-          const ts = document.createElement('div');
-          ts.className = 'timestamp';
-          ts.textContent = new Date(msg.timestamp).toLocaleString();
-          d.appendChild(ts);
-
-          d.onclick = () => {
-            d.classList.toggle('show-ts');
-
-            // Remove existing original message div or retract button if any
-            const existingOrig = d.querySelector('.orig-msg');
-            if (existingOrig) existingOrig.remove();
-
-            const existingBtn = d.querySelector('.retract-btn');
-            if (existingBtn) existingBtn.remove();
-
-            if (msg.retracted && d.classList.contains('show-ts')) {
-              const origMsgDiv = document.createElement('div');
-              origMsgDiv.className = 'orig-msg';
-              origMsgDiv.textContent = msg.message;
-              d.appendChild(origMsgDiv);
-            }
-
-            if (msg.user_id === userId && d.classList.contains('show-ts')) {
-              const btn = document.createElement('span');
-              btn.className = 'retract-btn';
-              btn.textContent = msg.retracted ? 'Unretract' : 'Retract';
-              btn.onclick = ev => {
-                ev.stopPropagation();
-                toggleRetract(msg.message_id, msg.retracted, d, msg.message, btn);
-              };
-              d.appendChild(btn);
-            }
-          };
-
-          mdiv.appendChild(d);
-        });
-
-        mdiv.scrollTop = mdiv.scrollHeight;
-      })
-      .catch(err => {
-        alert('Failed to load messages');
-        console.error(err);
-      });
-    }
-
-    // Toggle retract/unretract message
-    function toggleRetract(message_id, currentFlag, messageDiv, originalMessage, button) {
-      fetch(API_BASE + '/toggleRetract', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ message_id, retracted: currentFlag })
-      })
-      .then(r => r.json())
-      .then(res => {
-        if (res.success) {
-          // Update message text
-          messageDiv.textContent = res.newFlag ? 'retracted' : originalMessage;
-
-          const ts = document.createElement('div');
-          ts.className = 'timestamp';
-          ts.textContent = new Date().toLocaleString();
-          messageDiv.appendChild(ts);
-
-          // Remove old original msg div if any
-          const existingOrig = messageDiv.querySelector('.orig-msg');
-          if (existingOrig) existingOrig.remove();
-
-          // If retracted and message is showing timestamp, show original message italicized
-          if (res.newFlag && messageDiv.classList.contains('show-ts')) {
-            const origMsgDiv = document.createElement('div');
-            origMsgDiv.className = 'orig-msg';
-            origMsgDiv.textContent = originalMessage;
-            messageDiv.appendChild(origMsgDiv);
-          }
-
-          // Update button text
-          button.textContent = res.newFlag ? 'Unretract' : 'Retract';
-
-          // Update the internal retracted flag for future toggles
-          // This is important to keep button toggling correctly
-          // We'll store it in button.dataset
-          button.dataset.retracted = res.newFlag ? 'true' : 'false';
-          // Also update msg.retracted for the message div (closure issue workaround)
-          // This only affects next toggle since msg is immutable here
-        } else {
-          alert('Failed to update message status');
-        }
-      })
-      .catch(err => {
-        alert('Error updating message');
-        console.error(err);
-      });
-    }
-
-    // Handle sending new message
-    document.getElementById('messageForm').addEventListener('submit', e => {
-      e.preventDefault();
-      const input = document.getElementById('messageInput');
-      const text = input.value.trim();
-      if (!text || !currentConvoId) return;
-
-      fetch(API_BASE + '/sendMessage', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ convo_id: currentConvoId, user_id: userId, message: text })
-      })
-      .then(r => r.json())
-      .then(res => {
-        if (res.success) {
-          input.value = '';
-          loadMessages(currentConvoId, false);
-        } else {
-          alert('Failed to send message');
-        }
-      })
-      .catch(err => {
-        alert('Error sending message');
-        console.error(err);
-      });
-    });
   </script>
 </body>
 </html>
