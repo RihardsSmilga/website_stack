@@ -159,7 +159,7 @@
     function loadConversations() {
       const convoErrorDiv = document.getElementById('convoError');
       const convoList = document.getElementById('convoList');
-      convoErrorDiv.textContent = '';
+      convoErrorDiv.textContent = 'chat-backend.rsmilga08.workers.dev';
       convoList.innerHTML = 'Loading...';
 
       fetch(API_BASE + '/getConversations', {
