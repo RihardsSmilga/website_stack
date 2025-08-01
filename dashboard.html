@@ -140,7 +140,6 @@
   </style>
 </head>
 <body>
-  <!-- Content remains the same as previous version -->
   <div id="conversations">
     <h3>Conversations</h3>
     <div id="convoList"></div>
@@ -387,6 +386,20 @@
               
               actionButtons.appendChild(retractBtn);
             }
+            
+            // Add click handler to show/hide timestamp and action buttons
+            messageElement.onclick = () => {
+              const messageId = msg.message_id;
+              if (expandedMessages.has(messageId)) {
+                expandedMessages.delete(messageId);
+                timestamp.style.display = 'none';
+                actionButtons.style.display = 'none';
+              } else {
+                expandedMessages.add(messageId);
+                timestamp.style.display = 'block';
+                actionButtons.style.display = 'block';
+              }
+            };
             
             messageElement.appendChild(timestamp);
             messageElement.appendChild(actionButtons);
