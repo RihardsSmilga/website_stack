@@ -32,23 +32,29 @@
       margin-bottom: 10px;
       display: flex;
       flex-direction: column;
+      padding: 10px 0;
     }
 
     .message-container {
       display: flex;
-      margin-bottom: 6px;
+      margin-bottom: 10px;
+      width: 100%;
     }
 
     .user-message {
       align-self: flex-start;
       text-align: left;
-      margin-right: 20%;
+      margin-right: auto;
+      max-width: 80%;
+      cursor: pointer;
     }
 
     .my-message {
       align-self: flex-end;
       text-align: right;
-      margin-left: 20%;
+      margin-left: auto;
+      max-width: 80%;
+      cursor: pointer;
     }
 
     .timestamp {
@@ -75,6 +81,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      margin-top: auto;
     }
 
     #messageInput {
@@ -105,6 +112,14 @@
       margin-bottom: 10px;
       font-weight: bold;
     }
+
+    #noConvoSelected {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: #888;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -116,8 +131,8 @@
 
   <div id="messages">
     <div id="currentChatUser"></div>
-    <div id="messageList"></div>
     <div id="noConvoSelected">No conversation selected</div>
+    <div id="messageList"></div>
     <div id="inputSection" class="hidden">
       <input type="text" id="messageInput" placeholder="Type your message...">
       <button id="sendButton">Send</button>
@@ -131,6 +146,7 @@
     let currentConvo = null;
     let currentChatUser = null;
     let refreshInterval;
+    let clickedMessages = new Set();
 
     async function loadAvailableUsers() {
       try {
@@ -219,12 +235,15 @@
         
         const data = await res.json();
         const list = document.getElementById('messageList');
-        list.innerHTML = '';
         
-        if (data.messages.length === 0) {
-          return;
-        }
-
+        // Store scroll position before updating
+        const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
+        
+        // Create a temporary container to build new content
+        const tempContainer = document.createElement('div');
+        tempContainer.style.display = 'none';
+        document.body.appendChild(tempContainer);
+        
         data.messages.forEach(msg => {
           const messageContainer = document.createElement('div');
           messageContainer.className = 'message-container';
@@ -238,12 +257,23 @@
           timestamp.className = 'timestamp';
           timestamp.textContent = new Date(msg.timestamp).toLocaleString();
           
+          // Show timestamp/button if this message was previously clicked
+          if (clickedMessages.has(msg.message_id)) {
+            timestamp.style.display = 'block';
+          }
+          
           messageElement.appendChild(timestamp);
 
           if (msg.user_id === userId) {
             const retractBtn = document.createElement('button');
             retractBtn.className = 'retract-btn';
             retractBtn.textContent = msg.retracted ? 'Unretract' : 'Retract';
+            
+            // Show button if this message was previously clicked
+            if (clickedMessages.has(msg.message_id)) {
+              retractBtn.style.display = 'block';
+            }
+            
             retractBtn.onclick = async (e) => {
               e.stopPropagation();
               await fetch(`${apiBase}/toggleRetract`, {
@@ -260,18 +290,39 @@
           }
           
           messageElement.onclick = () => {
-            timestamp.style.display = timestamp.style.display === 'block' ? 'none' : 'block';
-            if (msg.user_id === userId) {
-              const btn = messageElement.querySelector('.retract-btn');
-              btn.style.display = btn.style.display === 'block' ? 'none' : 'block';
+            const messageId = msg.message_id;
+            if (clickedMessages.has(messageId)) {
+              clickedMessages.delete(messageId);
+              timestamp.style.display = 'none';
+              if (msg.user_id === userId) {
+                const btn = messageElement.querySelector('.retract-btn');
+                btn.style.display = 'none';
+              }
+            } else {
+              clickedMessages.add(messageId);
+              timestamp.style.display = 'block';
+              if (msg.user_id === userId) {
+                const btn = messageElement.querySelector('.retract-btn');
+                btn.style.display = 'block';
+              }
             }
           };
           
           messageContainer.appendChild(messageElement);
-          list.appendChild(messageContainer);
+          tempContainer.appendChild(messageContainer);
         });
         
-        list.scrollTop = list.scrollHeight;
+        // Replace the message list content
+        list.innerHTML = '';
+        while (tempContainer.firstChild) {
+          list.appendChild(tempContainer.firstChild);
+        }
+        document.body.removeChild(tempContainer);
+        
+        // Restore scroll position if needed
+        if (wasScrolledToBottom) {
+          list.scrollTop = list.scrollHeight;
+        }
       } catch (err) {
         console.error('Error loading messages:', err);
       }
