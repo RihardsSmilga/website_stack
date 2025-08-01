@@ -55,6 +55,7 @@
       margin-left: auto;
       max-width: 80%;
       cursor: pointer;
+      position: relative;
     }
 
     .timestamp {
@@ -63,14 +64,20 @@
       display: none;
     }
 
-    .retract-btn {
+    .retract-btn-container {
       display: none;
+      position: absolute;
+      right: 0;
+      bottom: 0;
+    }
+
+    .retract-btn {
       font-size: 0.75em;
       padding: 2px 5px;
-      margin-top: 5px;
       background: #f0f0f0;
       border: 1px solid #ccc;
       cursor: pointer;
+      white-space: nowrap;
     }
 
     .retracted-label {
@@ -159,6 +166,7 @@
     let refreshInterval;
     let expandedRetractedMessages = new Set();
     let expandedNormalMessages = new Set();
+    let lastMessageId = null;
 
     async function loadAvailableUsers() {
       try {
@@ -223,11 +231,28 @@
 
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
-      refreshInterval = setInterval(loadMessages, 500);
+      refreshInterval = setInterval(checkForNewMessages, 1000);
     }
 
-    function stopAutoRefresh() {
-      if (refreshInterval) clearInterval(refreshInterval);
+    async function checkForNewMessages() {
+      if (!currentConvo) return;
+      
+      try {
+        const res = await fetch(`${apiBase}/getLastMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convo_id: currentConvo })
+        });
+
+        if (!res.ok) throw new Error('Failed to check messages');
+        
+        const data = await res.json();
+        if (data.lastMessage && data.lastMessage.message_id !== lastMessageId) {
+          loadMessages();
+        }
+      } catch (err) {
+        console.error('Error checking messages:', err);
+      }
     }
 
     async function loadMessages() {
@@ -245,6 +270,10 @@
         const data = await res.json();
         const list = document.getElementById('messageList');
         const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
+        
+        if (data.messages.length > 0) {
+          lastMessageId = data.messages[data.messages.length - 1].message_id;
+        }
         
         const tempContainer = document.createElement('div');
         tempContainer.style.display = 'none';
@@ -276,18 +305,54 @@
               timestamp.style.display = 'block';
             }
             
-            retractedLabel.onclick = () => {
-              const messageId = msg.message_id;
-              if (expandedRetractedMessages.has(messageId)) {
-                expandedRetractedMessages.delete(messageId);
-                timestamp.style.display = 'none';
-                originalMessage.style.display = 'none';
+            // Add unretract button for user's own retracted messages
+            if (msg.user_id === userId) {
+              const unretractBtn = document.createElement('button');
+              unretractBtn.className = 'retract-btn';
+              unretractBtn.textContent = 'Unretract';
+              unretractBtn.style.marginLeft = '5px';
+              
+              if (expandedRetractedMessages.has(msg.message_id)) {
+                unretractBtn.style.display = 'inline-block';
               } else {
-                expandedRetractedMessages.add(messageId);
-                timestamp.style.display = 'block';
-                originalMessage.style.display = 'block';
+                unretractBtn.style.display = 'none';
               }
-              loadMessages();
+              
+              unretractBtn.onclick = async (e) => {
+                e.stopPropagation();
+                await fetch(`${apiBase}/toggleRetract`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    message_id: msg.message_id, 
+                    retracted: true 
+                  })
+                });
+                loadMessages();
+              };
+              
+              retractedLabel.appendChild(unretractBtn);
+            }
+            
+            retractedLabel.onclick = (e) => {
+              if (e.target.className !== 'retract-btn') {
+                const messageId = msg.message_id;
+                if (expandedRetractedMessages.has(messageId)) {
+                  expandedRetractedMessages.delete(messageId);
+                  timestamp.style.display = 'none';
+                  originalMessage.style.display = 'none';
+                  if (msg.user_id === userId) {
+                    retractedLabel.querySelector('.retract-btn').style.display = 'none';
+                  }
+                } else {
+                  expandedRetractedMessages.add(messageId);
+                  timestamp.style.display = 'block';
+                  originalMessage.style.display = 'block';
+                  if (msg.user_id === userId) {
+                    retractedLabel.querySelector('.retract-btn').style.display = 'inline-block';
+                  }
+                }
+              }
             };
             
             messageElement.appendChild(retractedLabel);
@@ -308,12 +373,15 @@
             messageElement.appendChild(timestamp);
 
             if (msg.user_id === userId) {
+              const retractBtnContainer = document.createElement('div');
+              retractBtnContainer.className = 'retract-btn-container';
+              
               const retractBtn = document.createElement('button');
               retractBtn.className = 'retract-btn';
               retractBtn.textContent = 'Retract';
               
               if (expandedNormalMessages.has(msg.message_id)) {
-                retractBtn.style.display = 'block';
+                retractBtnContainer.style.display = 'block';
               }
               
               retractBtn.onclick = async (e) => {
@@ -328,18 +396,27 @@
                 });
                 loadMessages();
               };
-              messageElement.appendChild(retractBtn);
+              
+              retractBtnContainer.appendChild(retractBtn);
+              messageElement.appendChild(retractBtnContainer);
             }
             
             messageElement.onclick = (e) => {
-              if (e.target.className !== 'retract-btn') {
+              if (!e.target.classList.contains('retract-btn')) {
                 const messageId = msg.message_id;
                 if (expandedNormalMessages.has(messageId)) {
                   expandedNormalMessages.delete(messageId);
+                  timestamp.style.display = 'none';
+                  if (msg.user_id === userId) {
+                    messageElement.querySelector('.retract-btn-container').style.display = 'none';
+                  }
                 } else {
                   expandedNormalMessages.add(messageId);
+                  timestamp.style.display = 'block';
+                  if (msg.user_id === userId) {
+                    messageElement.querySelector('.retract-btn-container').style.display = 'block';
+                  }
                 }
-                loadMessages();
               }
             };
           }
@@ -362,29 +439,37 @@
       }
     }
 
-    document.getElementById('sendButton').onclick = async () => {
+    function sendMessage() {
       const messageInput = document.getElementById('messageInput');
       const message = messageInput.value.trim();
       
       if (!message || !currentConvo) return;
       
-      try {
-        await fetch(`${apiBase}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            convo_id: currentConvo, 
-            user_id: userId, 
-            message 
-          })
-        });
-        
+      fetch(`${apiBase}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          convo_id: currentConvo, 
+          user_id: userId, 
+          message 
+        })
+      })
+      .then(() => {
         messageInput.value = '';
         loadMessages();
-      } catch (err) {
+      })
+      .catch(err => {
         console.error('Error sending message:', err);
+      });
+    }
+
+    document.getElementById('sendButton').onclick = sendMessage;
+
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
       }
-    };
+    });
 
     if (!userId || !username) {
       window.location.href = 'index.html';
@@ -392,7 +477,9 @@
       loadAvailableUsers();
     }
 
-    window.addEventListener('beforeunload', stopAutoRefresh);
+    window.addEventListener('beforeunload', () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    });
   </script>
 </body>
 </html>
