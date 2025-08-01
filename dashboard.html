@@ -158,6 +158,7 @@
     let currentChatUser = null;
     let refreshInterval;
     let expandedRetractedMessages = new Set();
+    let expandedNormalMessages = new Set();
 
     async function loadAvailableUsers() {
       try {
@@ -257,18 +258,14 @@
           messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
           
           if (msg.retracted) {
+            // Retracted message display
             const retractedLabel = document.createElement('div');
             retractedLabel.className = 'retracted-label';
             retractedLabel.textContent = 'retracted';
-            retractedLabel.onclick = () => {
-              const messageId = msg.message_id;
-              if (expandedRetractedMessages.has(messageId)) {
-                expandedRetractedMessages.delete(messageId);
-              } else {
-                expandedRetractedMessages.add(messageId);
-              }
-              loadMessages();
-            };
+            
+            const timestamp = document.createElement('div');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
             
             const originalMessage = document.createElement('div');
             originalMessage.className = 'original-message';
@@ -276,47 +273,76 @@
             
             if (expandedRetractedMessages.has(msg.message_id)) {
               originalMessage.style.display = 'block';
+              timestamp.style.display = 'block';
             }
+            
+            retractedLabel.onclick = () => {
+              const messageId = msg.message_id;
+              if (expandedRetractedMessages.has(messageId)) {
+                expandedRetractedMessages.delete(messageId);
+                timestamp.style.display = 'none';
+                originalMessage.style.display = 'none';
+              } else {
+                expandedRetractedMessages.add(messageId);
+                timestamp.style.display = 'block';
+                originalMessage.style.display = 'block';
+              }
+              loadMessages();
+            };
             
             messageElement.appendChild(retractedLabel);
             messageElement.appendChild(originalMessage);
+            messageElement.appendChild(timestamp);
           } else {
+            // Normal message display
             messageElement.textContent = msg.message;
-          }
-          
-          const timestamp = document.createElement('div');
-          timestamp.className = 'timestamp';
-          timestamp.textContent = new Date(msg.timestamp).toLocaleString();
-          messageElement.appendChild(timestamp);
-
-          if (msg.user_id === userId && !msg.retracted) {
-            const retractBtn = document.createElement('button');
-            retractBtn.className = 'retract-btn';
-            retractBtn.textContent = 'Retract';
-            retractBtn.onclick = async (e) => {
-              e.stopPropagation();
-              await fetch(`${apiBase}/toggleRetract`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  message_id: msg.message_id, 
-                  retracted: false 
-                })
-              });
-              loadMessages();
-            };
-            messageElement.appendChild(retractBtn);
-          }
-          
-          messageElement.onclick = (e) => {
-            if (!msg.retracted && e.target.className !== 'retract-btn') {
-              timestamp.style.display = timestamp.style.display === 'block' ? 'none' : 'block';
-              if (msg.user_id === userId) {
-                const btn = messageElement.querySelector('.retract-btn');
-                if (btn) btn.style.display = btn.style.display === 'block' ? 'none' : 'block';
-              }
+            
+            const timestamp = document.createElement('div');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+            
+            if (expandedNormalMessages.has(msg.message_id)) {
+              timestamp.style.display = 'block';
             }
-          };
+            
+            messageElement.appendChild(timestamp);
+
+            if (msg.user_id === userId) {
+              const retractBtn = document.createElement('button');
+              retractBtn.className = 'retract-btn';
+              retractBtn.textContent = 'Retract';
+              
+              if (expandedNormalMessages.has(msg.message_id)) {
+                retractBtn.style.display = 'block';
+              }
+              
+              retractBtn.onclick = async (e) => {
+                e.stopPropagation();
+                await fetch(`${apiBase}/toggleRetract`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    message_id: msg.message_id, 
+                    retracted: false 
+                  })
+                });
+                loadMessages();
+              };
+              messageElement.appendChild(retractBtn);
+            }
+            
+            messageElement.onclick = (e) => {
+              if (e.target.className !== 'retract-btn') {
+                const messageId = msg.message_id;
+                if (expandedNormalMessages.has(messageId)) {
+                  expandedNormalMessages.delete(messageId);
+                } else {
+                  expandedNormalMessages.add(messageId);
+                }
+                loadMessages();
+              }
+            };
+          }
           
           messageContainer.appendChild(messageElement);
           tempContainer.appendChild(messageContainer);
