@@ -231,26 +231,54 @@
       refreshInterval = setInterval(checkForNewMessages, 1000);
     }
 
-    async function checkForNewMessages() {
-      if (!currentConvo) return;
-      
-      try {
-        const res = await fetch(`${apiBase}/getLastMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ convo_id: currentConvo })
-        });
+    // Replace the checkForNewMessages function with this updated version
+async function checkForMessageUpdates() {
+  if (!currentConvo) return;
+  
+  try {
+    const res = await fetch(`${apiBase}/getLastMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        convo_id: currentConvo,
+        include_retraction_status: true // Add this flag if your API supports it
+      })
+    });
 
-        if (!res.ok) throw new Error('Failed to check messages');
-        
-        const data = await res.json();
-        if (data.lastMessage && (!lastMessageId || data.lastMessage.message_id !== lastMessageId)) {
-          loadMessages();
-        }
-      } catch (err) {
-        console.error('Error checking messages:', err);
-      }
+    if (!res.ok) throw new Error('Failed to check messages');
+    
+    const data = await res.json();
+    
+    // Check if either:
+    // 1. It's a new message (different ID)
+    // 2. The last message's retraction status changed
+    if (data.lastMessage && 
+        (!lastMessageId || 
+         data.lastMessage.message_id !== lastMessageId ||
+         (lastMessageRetracted !== undefined && 
+          data.lastMessage.retracted !== lastMessageRetracted))) {
+      loadMessages();
     }
+    
+    // Store the last message's ID and retraction status
+    if (data.lastMessage) {
+      lastMessageId = data.lastMessage.message_id;
+      lastMessageRetracted = data.lastMessage.retracted;
+    }
+  } catch (err) {
+    console.error('Error checking messages:', err);
+  }
+}
+
+// Update the startAutoRefresh function to use the new function
+function startAutoRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(checkForMessageUpdates, 1000);
+}
+
+// Add these variables at the top with your other declarations
+let lastMessageId = null;
+let lastMessageRetracted = null;
 
     async function loadMessages() {
       if (!currentConvo) return;
