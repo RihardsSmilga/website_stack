@@ -138,15 +138,11 @@
       color: black;
     }
 
-    /* Removed gray box from usernames */
+    /* Simplified conversation user style - no hover effect */
     .convo-user {
       padding: 5px;
       cursor: pointer;
       margin: 2px 0;
-    }
-
-    .convo-user:hover {
-      background-color: #f5f5f5;
     }
   </style>
 </head>
@@ -176,7 +172,21 @@
     let refreshInterval;
     let expandedMessages = new Set();
     let lastKnownUpdate = null;
-    let shouldAutoScroll = true; // Flag for auto-scrolling
+    let shouldAutoScroll = true;
+
+    // Helper function to format date with leading zeros (01.08.25)
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = String(date.getFullYear()).slice(-2);
+      return `${day}.${month}.${year}`;
+    }
+
+    // Check if user is scrolled to bottom
+    function isScrolledToBottom(element) {
+      return element.scrollHeight - element.scrollTop === element.clientHeight;
+    }
 
     // Redirect if not logged in
     if (!userId || !username) {
@@ -218,12 +228,12 @@
           
           const userElement = document.createElement('div');
           userElement.textContent = user.username;
-          userElement.className = 'convo-user'; // Added class for styling
+          userElement.className = 'convo-user';
           
           userElement.onclick = () => {
             currentChatUser = user.username;
             document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
-            shouldAutoScroll = true; // Reset auto-scroll when starting new conversation
+            shouldAutoScroll = true;
             loadOrCreateConversation(user.user_id);
           };
           
@@ -233,10 +243,7 @@
       } catch (err) {
         console.error('Error loading users:', err);
         document.getElementById('noConvos').classList.remove('hidden');
-        document.getElementById('noConvos').textContent = 
-          err.message.includes('Invalid response') ? 
-          'Server error' : 
-          'Failed to load users';
+        document.getElementById('noConvos').textContent = 'Failed to load users';
       }
     }
 
@@ -335,7 +342,7 @@
             
             const timestamp = document.createElement('div');
             timestamp.className = 'timestamp';
-            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+            timestamp.textContent = formatDate(msg.timestamp);
             
             const originalMessage = document.createElement('div');
             originalMessage.className = 'original-message';
@@ -375,7 +382,7 @@
             
             const timestamp = document.createElement('div');
             timestamp.className = 'timestamp';
-            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+            timestamp.textContent = formatDate(msg.timestamp);
             
             const actionButtons = document.createElement('div');
             actionButtons.className = 'action-buttons';
@@ -413,7 +420,6 @@
         }
         document.body.removeChild(tempContainer);
         
-        // Auto-scroll if new message from other user or if we were already at bottom
         if (shouldAutoScroll || wasScrolledToBottom) {
           list.scrollTop = list.scrollHeight;
           shouldAutoScroll = false;
@@ -421,10 +427,6 @@
       } catch (err) {
         console.error('Error loading messages:', err);
       }
-    }
-
-    function isScrolledToBottom(element) {
-      return element.scrollHeight - element.scrollTop === element.clientHeight;
     }
 
     function toggleMessageExpansion(messageId) {
@@ -479,7 +481,7 @@
       })
       .then(() => {
         messageInput.value = '';
-        shouldAutoScroll = true; // Ensure we scroll to bottom after sending
+        shouldAutoScroll = true;
       })
       .catch(err => {
         console.error('Error sending message:', err);
@@ -489,7 +491,6 @@
     // Setup message list scroll behavior
     const messageList = document.getElementById('messageList');
     messageList.addEventListener('scroll', () => {
-      // Disable auto-scroll if user scrolls up
       if (!isScrolledToBottom(messageList)) {
         shouldAutoScroll = false;
       }
