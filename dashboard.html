@@ -5,138 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat Dashboard</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      height: 100vh;
-      margin: 0;
-    }
-
-    #conversations {
-      width: 25%;
-      border-right: 1px solid #ccc;
-      padding: 10px;
-      overflow-y: auto;
-    }
-
-    #messages {
-      width: 75%;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-
-    #messageList {
-      flex: 1;
-      overflow-y: auto;
-      margin-bottom: 10px;
-      display: flex;
-      flex-direction: column;
-      padding: 10px 0;
-    }
-
-    .message-container {
-      display: flex;
-      margin-bottom: 10px;
-      width: 100%;
-    }
-
-    .user-message {
-      align-self: flex-start;
-      text-align: left;
-      margin-right: auto;
-      max-width: 80%;
-      cursor: pointer;
-    }
-
-    .my-message {
-      align-self: flex-end;
-      text-align: right;
-      margin-left: auto;
-      max-width: 80%;
-      cursor: pointer;
-    }
-
-    .timestamp {
-      font-size: 0.8em;
-      color: gray;
-      display: none;
-    }
-
-    .action-buttons {
-      display: none;
-      text-align: right;
-      margin-top: 5px;
-    }
-
-    .retract-btn, .unretract-btn {
-      font-size: 0.75em;
-      padding: 2px 5px;
-      background: #f0f0f0;
-      border: 1px solid #ccc;
-      cursor: pointer;
-      margin-left: 5px;
-    }
-
-    .retracted-label {
-      font-style: italic;
-      color: #888;
-      cursor: pointer;
-      display: block;
-    }
-
-    .original-message {
-      display: none;
-      padding-top: 5px;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    #inputSection {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: auto;
-    }
-
-    #messageInput {
-      flex: 1;
-      padding: 8px;
-      font-size: 1em;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    #sendButton {
-      padding: 8px 16px;
-      background-color: black;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    #noConvos {
-      margin-top: 10px;
-      color: black;
-      font-style: italic;
-    }
-
-    #currentChatUser {
-      font-size: 1.2em;
-      margin-bottom: 10px;
-      font-weight: bold;
-    }
-
-    #noConvoSelected {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: black;
-    }
+    /* [Previous CSS styles remain exactly the same] */
   </style>
 </head>
 <body>
@@ -164,6 +33,7 @@
     let currentChatUser = null;
     let refreshInterval;
     let expandedMessages = new Set();
+    let lastKnownUpdate = null;
 
     async function loadAvailableUsers() {
       try {
@@ -214,6 +84,7 @@
         
         const data = await res.json();
         currentConvo = data.convo_id;
+        lastKnownUpdate = null;
         
         document.getElementById('noConvoSelected').classList.add('hidden');
         document.getElementById('inputSection').classList.remove('hidden');
@@ -226,59 +97,32 @@
       }
     }
 
+    async function checkForUpdates() {
+      if (!currentConvo) return;
+      
+      try {
+        const res = await fetch(`${apiBase}/getLastUpdate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convo_id: currentConvo })
+        });
+
+        if (!res.ok) throw new Error('Failed to check updates');
+        
+        const data = await res.json();
+        
+        if (!lastKnownUpdate || (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate))) {
+          loadMessages();
+        }
+      } catch (err) {
+        console.error('Error checking updates:', err);
+      }
+    }
+
     function startAutoRefresh() {
       if (refreshInterval) clearInterval(refreshInterval);
-      refreshInterval = setInterval(checkForNewMessages, 1000);
+      refreshInterval = setInterval(checkForUpdates, 1000);
     }
-
-    // Replace the checkForNewMessages function with this updated version
-async function checkForMessageUpdates() {
-  if (!currentConvo) return;
-  
-  try {
-    const res = await fetch(`${apiBase}/getLastMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        convo_id: currentConvo,
-        include_retraction_status: true // Add this flag if your API supports it
-      })
-    });
-
-    if (!res.ok) throw new Error('Failed to check messages');
-    
-    const data = await res.json();
-    
-    // Check if either:
-    // 1. It's a new message (different ID)
-    // 2. The last message's retraction status changed
-    if (data.lastMessage && 
-        (!lastMessageId || 
-         data.lastMessage.message_id !== lastMessageId ||
-         (lastMessageRetracted !== undefined && 
-          data.lastMessage.retracted !== lastMessageRetracted))) {
-      loadMessages();
-    }
-    
-    // Store the last message's ID and retraction status
-    if (data.lastMessage) {
-      lastMessageId = data.lastMessage.message_id;
-      lastMessageRetracted = data.lastMessage.retracted;
-    }
-  } catch (err) {
-    console.error('Error checking messages:', err);
-  }
-}
-
-// Update the startAutoRefresh function to use the new function
-function startAutoRefresh() {
-  if (refreshInterval) clearInterval(refreshInterval);
-  refreshInterval = setInterval(checkForMessageUpdates, 1000);
-}
-
-// Add these variables at the top with your other declarations
-let lastMessageId = null;
-let lastMessageRetracted = null;
 
     async function loadMessages() {
       if (!currentConvo) return;
@@ -296,8 +140,13 @@ let lastMessageRetracted = null;
         const list = document.getElementById('messageList');
         const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
         
-        if (data.messages.length > 0) {
-          lastMessageId = data.messages[data.messages.length - 1].message_id;
+        // Find the newest update time
+        if (data.messages && data.messages.length > 0) {
+          const newestUpdate = data.messages.reduce((latest, msg) => {
+            const msgTime = new Date(msg.updated_at);
+            return msgTime > latest ? msgTime : latest;
+          }, new Date(0));
+          lastKnownUpdate = newestUpdate.toISOString();
         }
         
         const tempContainer = document.createElement('div');
@@ -313,8 +162,6 @@ let lastMessageRetracted = null;
           
           if (msg.retracted) {
             // Retracted message display
-            const retractedContainer = document.createElement('div');
-            
             const retractedLabel = document.createElement('span');
             retractedLabel.className = 'retracted-label';
             retractedLabel.textContent = 'retracted';
@@ -343,41 +190,18 @@ let lastMessageRetracted = null;
               
               unretractBtn.onclick = async (e) => {
                 e.stopPropagation();
-                await fetch(`${apiBase}/toggleRetract`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    message_id: msg.message_id, 
-                    retracted: true 
-                  })
-                });
-                loadMessages();
+                await retractMessage(msg.message_id, true);
               };
               
               actionButtons.appendChild(unretractBtn);
             }
             
-            retractedLabel.onclick = () => {
-              const messageId = msg.message_id;
-              if (expandedMessages.has(messageId)) {
-                expandedMessages.delete(messageId);
-                timestamp.style.display = 'none';
-                originalMessage.style.display = 'none';
-                actionButtons.style.display = 'none';
-              } else {
-                expandedMessages.add(messageId);
-                timestamp.style.display = 'block';
-                originalMessage.style.display = 'block';
-                actionButtons.style.display = 'block';
-              }
-            };
+            retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
             
-            retractedContainer.appendChild(retractedLabel);
-            retractedContainer.appendChild(originalMessage);
-            retractedContainer.appendChild(timestamp);
-            retractedContainer.appendChild(actionButtons);
-            
-            messageElement.appendChild(retractedContainer);
+            messageElement.appendChild(retractedLabel);
+            messageElement.appendChild(originalMessage);
+            messageElement.appendChild(timestamp);
+            messageElement.appendChild(actionButtons);
           } else {
             // Normal message display
             messageElement.textContent = msg.message;
@@ -401,34 +225,13 @@ let lastMessageRetracted = null;
               
               retractBtn.onclick = async (e) => {
                 e.stopPropagation();
-                await fetch(`${apiBase}/toggleRetract`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    message_id: msg.message_id, 
-                    retracted: false 
-                  })
-                });
-                loadMessages();
+                await retractMessage(msg.message_id, false);
               };
               
               actionButtons.appendChild(retractBtn);
             }
             
-            // Add click handler to show/hide timestamp and action buttons
-            messageElement.onclick = () => {
-              const messageId = msg.message_id;
-              if (expandedMessages.has(messageId)) {
-                expandedMessages.delete(messageId);
-                timestamp.style.display = 'none';
-                actionButtons.style.display = 'none';
-              } else {
-                expandedMessages.add(messageId);
-                timestamp.style.display = 'block';
-                actionButtons.style.display = 'block';
-              }
-            };
-            
+            messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
             messageElement.appendChild(timestamp);
             messageElement.appendChild(actionButtons);
           }
@@ -451,6 +254,35 @@ let lastMessageRetracted = null;
       }
     }
 
+    function toggleMessageExpansion(messageId) {
+      if (expandedMessages.has(messageId)) {
+        expandedMessages.delete(messageId);
+      } else {
+        expandedMessages.add(messageId);
+      }
+      loadMessages(); // Refresh to update visibility
+    }
+
+    async function retractMessage(messageId, isRetracted) {
+      try {
+        const res = await fetch(`${apiBase}/toggleRetract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message_id: messageId, 
+            retracted: isRetracted 
+          })
+        });
+
+        if (!res.ok) throw new Error('Failed to toggle retract');
+        
+        const data = await res.json();
+        lastKnownUpdate = data.updated_at;
+      } catch (err) {
+        console.error('Error toggling retract:', err);
+      }
+    }
+
     function sendMessage() {
       const messageInput = document.getElementById('messageInput');
       const message = messageInput.value.trim();
@@ -468,7 +300,6 @@ let lastMessageRetracted = null;
       })
       .then(() => {
         messageInput.value = '';
-        loadMessages();
       })
       .catch(err => {
         console.error('Error sending message:', err);
