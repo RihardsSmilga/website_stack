@@ -394,25 +394,48 @@
       loadMessages(); // Refresh to update visibility
     }
 
-    async function retractMessage(messageId, isRetracted) {
-      try {
-        const res = await fetch(`${apiBase}/toggleRetract`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message_id: messageId, 
-            retracted: isRetracted 
-          })
-        });
+    // Replace the retractMessage function with this:
+async function retractMessage(messageId, isCurrentlyRetracted) {
+  try {
+    const res = await fetch(`${apiBase}/toggleRetract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        message_id: messageId, 
+        retracted: isCurrentlyRetracted 
+      })
+    });
 
-        if (!res.ok) throw new Error('Failed to toggle retract');
-        
-        const data = await res.json();
-        lastKnownUpdate = data.updated_at;
-      } catch (err) {
-        console.error('Error toggling retract:', err);
-      }
+    if (!res.ok) throw new Error('Failed to toggle retract');
+    
+    const data = await res.json();
+    lastKnownUpdate = data.updated_at;
+    
+    // Force immediate refresh of messages
+    await loadMessages();
+    
+    // Rebuild the expandedMessages set for the updated message
+    if (expandedMessages.has(messageId)) {
+      expandedMessages.delete(messageId);
+      expandedMessages.add(messageId); // This ensures the message stays expanded
     }
+  } catch (err) {
+    console.error('Error toggling retract:', err);
+  }
+}
+
+// Update the message rendering logic in loadMessages():
+// Change the unretract button click handler to:
+unretractBtn.onclick = async (e) => {
+  e.stopPropagation();
+  await retractMessage(msg.message_id, true); // true means it's currently retracted
+};
+
+// Change the retract button click handler to:
+retractBtn.onclick = async (e) => {
+  e.stopPropagation();
+  await retractMessage(msg.message_id, false); // false means it's not currently retracted
+};
 
     function sendMessage() {
       const messageInput = document.getElementById('messageInput');
