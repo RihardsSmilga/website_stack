@@ -270,134 +270,134 @@
     }
 
     async function loadMessages() {
-      if (!currentConvo) return;
-      
-      try {
-        const res = await fetch(`${apiBase}/getMessages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ convo_id: currentConvo })
-        });
+  if (!currentConvo) return;
+  
+  try {
+    const res = await fetch(`${apiBase}/getMessages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ convo_id: currentConvo })
+    });
 
-        if (!res.ok) throw new Error('Failed to load messages');
-        
-        const data = await res.json();
-        const list = document.getElementById('messageList');
-        const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
-        
-        // Find the newest update time
-        if (data.messages && data.messages.length > 0) {
-          const newestUpdate = data.messages.reduce((latest, msg) => {
-            const msgTime = new Date(msg.updated_at);
-            return msgTime > latest ? msgTime : latest;
-          }, new Date(0));
-          lastKnownUpdate = newestUpdate.toISOString();
-        }
-        
-        const tempContainer = document.createElement('div');
-        tempContainer.style.display = 'none';
-        document.body.appendChild(tempContainer);
-        
-        data.messages.forEach(msg => {
-          const messageContainer = document.createElement('div');
-          messageContainer.className = 'message-container';
-          
-          const messageElement = document.createElement('div');
-          messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
-          
-          if (msg.retracted) {
-            // Retracted message display
-            const retractedLabel = document.createElement('span');
-            retractedLabel.className = 'retracted-label';
-            retractedLabel.textContent = 'retracted';
-            
-            const timestamp = document.createElement('div');
-            timestamp.className = 'timestamp';
-            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
-            
-            const originalMessage = document.createElement('div');
-            originalMessage.className = 'original-message';
-            originalMessage.textContent = msg.message;
-            
-            const actionButtons = document.createElement('div');
-            actionButtons.className = 'action-buttons';
-            
-            if (expandedMessages.has(msg.message_id)) {
-              timestamp.style.display = 'block';
-              originalMessage.style.display = 'block';
-              actionButtons.style.display = 'block';
-            }
-            
-            if (msg.user_id === userId) {
-              const unretractBtn = document.createElement('button');
-              unretractBtn.className = 'unretract-btn';
-              unretractBtn.textContent = 'Unretract';
-              
-              unretractBtn.onclick = async (e) => {
-                e.stopPropagation();
-                await retractMessage(msg.message_id, true);
-              };
-              
-              actionButtons.appendChild(unretractBtn);
-            }
-            
-            retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
-            
-            messageElement.appendChild(retractedLabel);
-            messageElement.appendChild(originalMessage);
-            messageElement.appendChild(timestamp);
-            messageElement.appendChild(actionButtons);
-          } else {
-            // Normal message display
-            messageElement.textContent = msg.message;
-            
-            const timestamp = document.createElement('div');
-            timestamp.className = 'timestamp';
-            timestamp.textContent = new Date(msg.timestamp).toLocaleString();
-            
-            const actionButtons = document.createElement('div');
-            actionButtons.className = 'action-buttons';
-            
-            if (expandedMessages.has(msg.message_id)) {
-              timestamp.style.display = 'block';
-              actionButtons.style.display = 'block';
-            }
-            
-            if (msg.user_id === userId) {
-              const retractBtn = document.createElement('button');
-              retractBtn.className = 'retract-btn';
-              retractBtn.textContent = 'Retract';
-              
-              retractBtn.onclick = async (e) => {
-                e.stopPropagation();
-                await retractMessage(msg.message_id, false);
-              };
-              
-              actionButtons.appendChild(retractBtn);
-            }
-            
-            messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
-            messageElement.appendChild(timestamp);
-            messageElement.appendChild(actionButtons);
-          }
-          
-          messageContainer.appendChild(messageElement);
-          tempContainer.appendChild(messageContainer);
-        });
-        
-        list.innerHTML = '';
-        while (tempContainer.firstChild) {
-          list.appendChild(tempContainer.firstChild);
-        }
-        document.body.removeChild(tempContainer);
-        
-        if (wasScrolledToBottom) {
-          list.scrollTop = list.scrollHeight;
-        }
-      } catch (err) {
-        console.error('Error loading messages:', err);
-      }
+    if (!res.ok) throw new Error('Failed to load messages');
+    
+    const data = await res.json();
+    const list = document.getElementById('messageList');
+    const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
+    
+    // Find the newest update time
+    if (data.messages && data.messages.length > 0) {
+      const newestUpdate = data.messages.reduce((latest, msg) => {
+        const msgTime = new Date(msg.updated_at);
+        return msgTime > latest ? msgTime : latest;
+      }, new Date(0));
+      lastKnownUpdate = newestUpdate.toISOString();
     }
+    
+    const tempContainer = document.createElement('div');
+    tempContainer.style.display = 'none';
+    document.body.appendChild(tempContainer);
+    
+    data.messages.forEach(msg => {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'message-container';
+      
+      const messageElement = document.createElement('div');
+      messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+      
+      if (msg.retracted) {
+        // Retracted message display
+        const retractedLabel = document.createElement('span');
+        retractedLabel.className = 'retracted-label';
+        retractedLabel.textContent = 'retracted';
+        
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+        
+        const originalMessage = document.createElement('div');
+        originalMessage.className = 'original-message';
+        originalMessage.textContent = msg.message;
+        
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          originalMessage.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+        
+        if (msg.user_id === userId) {
+          const unretractBtn = document.createElement('button');
+          unretractBtn.className = 'unretract-btn';
+          unretractBtn.textContent = 'Unretract';
+          
+          unretractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, true);
+          };
+          
+          actionButtons.appendChild(unretractBtn);
+        }
+        
+        retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
+        
+        messageElement.appendChild(retractedLabel);
+        messageElement.appendChild(originalMessage);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+      } else {
+        // Normal message display
+        messageElement.textContent = msg.message;
+        
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = new Date(msg.timestamp).toLocaleString();
+        
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+        
+        if (msg.user_id === userId) {
+          const retractBtn = document.createElement('button');
+          retractBtn.className = 'retract-btn';
+          retractBtn.textContent = 'Retract';
+          
+          retractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, false);
+          };
+          
+          actionButtons.appendChild(retractBtn);
+        }
+        
+        messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+      }
+      
+      messageContainer.appendChild(messageElement);
+      tempContainer.appendChild(messageContainer);
+    });
+    
+    list.innerHTML = '';
+    while (tempContainer.firstChild) {
+      list.appendChild(tempContainer.firstChild);
+    }
+    document.body.removeChild(tempContainer);
+    
+    if (wasScrolledToBottom) {
+      list.scrollTop = list.scrollHeight;
+    }
+  } catch (err) {
+    console.error('Error loading messages:', err);
+  }
+}
 
     function toggleMessageExpansion(messageId) {
       if (expandedMessages.has(messageId)) {
