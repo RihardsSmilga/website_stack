@@ -62,31 +62,34 @@
       font-size: 0.8em;
       color: gray;
       display: none;
+      width: 100%;
     }
 
-    .retract-btn {
+    .action-buttons {
       display: none;
+      width: 100%;
+      text-align: right;
+    }
+
+    .retract-btn, .unretract-btn {
       font-size: 0.75em;
       padding: 2px 5px;
-      margin-top: 5px;
       background: #f0f0f0;
       border: 1px solid #ccc;
       cursor: pointer;
-      float: right;
-      clear: both;
+      margin-left: 5px;
     }
 
     .retracted-label {
       font-style: italic;
       color: #888;
       cursor: pointer;
-      display: inline-block;
       width: 100%;
     }
 
     .original-message {
       display: none;
-      clear: both;
+      width: 100%;
       padding-top: 5px;
     }
 
@@ -139,7 +142,6 @@
   </style>
 </head>
 <body>
-  <!-- Content remains the same as previous version -->
   <div id="conversations">
     <h3>Conversations</h3>
     <div id="convoList"></div>
@@ -157,7 +159,100 @@
   </div>
 
   <script>
-    // Previous JavaScript code remains the same until the loadMessages function
+    const apiBase = 'https://chat-backend.rsmilga08.workers.dev';
+    const userId = parseInt(sessionStorage.getItem('user_id'), 10);
+    const username = sessionStorage.getItem('username');
+    let currentConvo = null;
+    let currentChatUser = null;
+    let refreshInterval;
+    let expandedMessages = new Set();
+
+    async function loadAvailableUsers() {
+      try {
+        const res = await fetch(`${apiBase}/getUsers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_user_id: userId })
+        });
+
+        if (!res.ok) throw new Error('Failed to fetch users');
+        
+        const data = await res.json();
+        const convoList = document.getElementById('convoList');
+        convoList.innerHTML = '';
+        
+        if (data.users && data.users.length > 0) {
+          document.getElementById('noConvos').classList.add('hidden');
+          data.users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.textContent = user.username;
+            userElement.style.padding = '5px';
+            userElement.style.cursor = 'pointer';
+            userElement.onclick = () => {
+              currentChatUser = user.username;
+              document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
+              loadOrCreateConversation(user.user_id);
+            };
+            convoList.appendChild(userElement);
+          });
+        } else {
+          document.getElementById('noConvos').classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Error loading users:', err);
+        document.getElementById('noConvos').classList.remove('hidden');
+      }
+    }
+
+    async function loadOrCreateConversation(otherUserId) {
+      try {
+        const res = await fetch(`${apiBase}/findOrCreateConvo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user1: userId, user2: otherUserId })
+        });
+
+        if (!res.ok) throw new Error('Failed to find/create conversation');
+        
+        const data = await res.json();
+        currentConvo = data.convo_id;
+        
+        document.getElementById('noConvoSelected').classList.add('hidden');
+        document.getElementById('inputSection').classList.remove('hidden');
+        
+        startAutoRefresh();
+        loadMessages();
+      } catch (err) {
+        console.error('Error loading conversation:', err);
+        alert('Failed to start conversation');
+      }
+    }
+
+    function startAutoRefresh() {
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(checkForNewMessages, 1000);
+    }
+
+    async function checkForNewMessages() {
+      if (!currentConvo) return;
+      
+      try {
+        const res = await fetch(`${apiBase}/getLastMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convo_id: currentConvo })
+        });
+
+        if (!res.ok) throw new Error('Failed to check messages');
+        
+        const data = await res.json();
+        if (data.lastMessage && (!lastMessageId || data.lastMessage.message_id !== lastMessageId)) {
+          loadMessages();
+        }
+      } catch (err) {
+        console.error('Error checking messages:', err);
+      }
+    }
 
     async function loadMessages() {
       if (!currentConvo) return;
@@ -204,20 +299,19 @@
             originalMessage.className = 'original-message';
             originalMessage.textContent = msg.message;
             
-            if (expandedRetractedMessages.has(msg.message_id)) {
+            const actionButtons = document.createElement('div');
+            actionButtons.className = 'action-buttons';
+            
+            if (expandedMessages.has(msg.message_id)) {
               timestamp.style.display = 'block';
               originalMessage.style.display = 'block';
+              actionButtons.style.display = 'block';
             }
             
-            // Add unretract button to the far right
             if (msg.user_id === userId) {
               const unretractBtn = document.createElement('button');
-              unretractBtn.className = 'retract-btn';
+              unretractBtn.className = 'unretract-btn';
               unretractBtn.textContent = 'Unretract';
-              
-              if (expandedRetractedMessages.has(msg.message_id)) {
-                unretractBtn.style.display = 'block';
-              }
               
               unretractBtn.onclick = async (e) => {
                 e.stopPropagation();
@@ -232,35 +326,28 @@
                 loadMessages();
               };
               
-              retractedLabel.appendChild(timestamp);
-              retractedLabel.appendChild(unretractBtn);
-            } else {
-              retractedLabel.appendChild(timestamp);
+              actionButtons.appendChild(unretractBtn);
             }
             
-            retractedLabel.onclick = (e) => {
-              if (e.target.className !== 'retract-btn') {
-                const messageId = msg.message_id;
-                if (expandedRetractedMessages.has(messageId)) {
-                  expandedRetractedMessages.delete(messageId);
-                  timestamp.style.display = 'none';
-                  originalMessage.style.display = 'none';
-                  if (msg.user_id === userId) {
-                    retractedLabel.querySelector('.retract-btn').style.display = 'none';
-                  }
-                } else {
-                  expandedRetractedMessages.add(messageId);
-                  timestamp.style.display = 'block';
-                  originalMessage.style.display = 'block';
-                  if (msg.user_id === userId) {
-                    retractedLabel.querySelector('.retract-btn').style.display = 'block';
-                  }
-                }
+            retractedLabel.onclick = () => {
+              const messageId = msg.message_id;
+              if (expandedMessages.has(messageId)) {
+                expandedMessages.delete(messageId);
+                timestamp.style.display = 'none';
+                originalMessage.style.display = 'none';
+                actionButtons.style.display = 'none';
+              } else {
+                expandedMessages.add(messageId);
+                timestamp.style.display = 'block';
+                originalMessage.style.display = 'block';
+                actionButtons.style.display = 'block';
               }
             };
             
             messageElement.appendChild(retractedLabel);
+            messageElement.appendChild(timestamp);
             messageElement.appendChild(originalMessage);
+            messageElement.appendChild(actionButtons);
           } else {
             // Normal message display
             messageElement.textContent = msg.message;
@@ -269,20 +356,18 @@
             timestamp.className = 'timestamp';
             timestamp.textContent = new Date(msg.timestamp).toLocaleString();
             
-            if (expandedNormalMessages.has(msg.message_id)) {
+            const actionButtons = document.createElement('div');
+            actionButtons.className = 'action-buttons';
+            
+            if (expandedMessages.has(msg.message_id)) {
               timestamp.style.display = 'block';
+              actionButtons.style.display = 'block';
             }
             
-            messageElement.appendChild(timestamp);
-
             if (msg.user_id === userId) {
               const retractBtn = document.createElement('button');
               retractBtn.className = 'retract-btn';
               retractBtn.textContent = 'Retract';
-              
-              if (expandedNormalMessages.has(msg.message_id)) {
-                retractBtn.style.display = 'block';
-              }
               
               retractBtn.onclick = async (e) => {
                 e.stopPropagation();
@@ -297,27 +382,24 @@
                 loadMessages();
               };
               
-              messageElement.appendChild(retractBtn);
+              actionButtons.appendChild(retractBtn);
             }
             
-            messageElement.onclick = (e) => {
-              if (!e.target.classList.contains('retract-btn')) {
-                const messageId = msg.message_id;
-                if (expandedNormalMessages.has(messageId)) {
-                  expandedNormalMessages.delete(messageId);
-                  timestamp.style.display = 'none';
-                  if (msg.user_id === userId) {
-                    messageElement.querySelector('.retract-btn').style.display = 'none';
-                  }
-                } else {
-                  expandedNormalMessages.add(messageId);
-                  timestamp.style.display = 'block';
-                  if (msg.user_id === userId) {
-                    messageElement.querySelector('.retract-btn').style.display = 'block';
-                  }
-                }
+            messageElement.onclick = () => {
+              const messageId = msg.message_id;
+              if (expandedMessages.has(messageId)) {
+                expandedMessages.delete(messageId);
+                timestamp.style.display = 'none';
+                actionButtons.style.display = 'none';
+              } else {
+                expandedMessages.add(messageId);
+                timestamp.style.display = 'block';
+                actionButtons.style.display = 'block';
               }
             };
+            
+            messageElement.appendChild(timestamp);
+            messageElement.appendChild(actionButtons);
           }
           
           messageContainer.appendChild(messageElement);
@@ -338,8 +420,47 @@
       }
     }
 
-    // Rest of the JavaScript remains the same
-    // ...
+    function sendMessage() {
+      const messageInput = document.getElementById('messageInput');
+      const message = messageInput.value.trim();
+      
+      if (!message || !currentConvo) return;
+      
+      fetch(`${apiBase}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          convo_id: currentConvo, 
+          user_id: userId, 
+          message 
+        })
+      })
+      .then(() => {
+        messageInput.value = '';
+        loadMessages();
+      })
+      .catch(err => {
+        console.error('Error sending message:', err);
+      });
+    }
+
+    document.getElementById('sendButton').onclick = sendMessage;
+
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    if (!userId || !username) {
+      window.location.href = 'index.html';
+    } else {
+      loadAvailableUsers();
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    });
   </script>
 </body>
 </html>
