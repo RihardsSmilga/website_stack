@@ -24,6 +24,7 @@
       padding: 10px;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
     #messageList {
@@ -55,7 +56,6 @@
       margin-left: auto;
       max-width: 80%;
       cursor: pointer;
-      position: relative;
     }
 
     .timestamp {
@@ -64,20 +64,14 @@
       display: none;
     }
 
-    .retract-btn-container {
-      display: none;
-      position: absolute;
-      right: 0;
-      bottom: 0;
-    }
-
     .retract-btn {
+      display: none;
       font-size: 0.75em;
       padding: 2px 5px;
+      margin-top: 5px;
       background: #f0f0f0;
       border: 1px solid #ccc;
       cursor: pointer;
-      white-space: nowrap;
     }
 
     .retracted-label {
@@ -134,9 +128,8 @@
     #noConvoSelected {
       position: absolute;
       top: 10px;
-      right: 10px;
-      color: #888;
-      font-style: italic;
+      left: 10px;
+      color: black;
     }
   </style>
 </head>
@@ -301,21 +294,18 @@
             originalMessage.textContent = msg.message;
             
             if (expandedRetractedMessages.has(msg.message_id)) {
-              originalMessage.style.display = 'block';
               timestamp.style.display = 'block';
+              originalMessage.style.display = 'block';
             }
             
-            // Add unretract button for user's own retracted messages
+            // Add unretract button below timestamp
             if (msg.user_id === userId) {
               const unretractBtn = document.createElement('button');
               unretractBtn.className = 'retract-btn';
               unretractBtn.textContent = 'Unretract';
-              unretractBtn.style.marginLeft = '5px';
               
               if (expandedRetractedMessages.has(msg.message_id)) {
-                unretractBtn.style.display = 'inline-block';
-              } else {
-                unretractBtn.style.display = 'none';
+                unretractBtn.style.display = 'block';
               }
               
               unretractBtn.onclick = async (e) => {
@@ -331,7 +321,11 @@
                 loadMessages();
               };
               
+              retractedLabel.appendChild(timestamp);
+              retractedLabel.appendChild(document.createElement('br'));
               retractedLabel.appendChild(unretractBtn);
+            } else {
+              retractedLabel.appendChild(timestamp);
             }
             
             retractedLabel.onclick = (e) => {
@@ -349,7 +343,7 @@
                   timestamp.style.display = 'block';
                   originalMessage.style.display = 'block';
                   if (msg.user_id === userId) {
-                    retractedLabel.querySelector('.retract-btn').style.display = 'inline-block';
+                    retractedLabel.querySelector('.retract-btn').style.display = 'block';
                   }
                 }
               }
@@ -357,7 +351,6 @@
             
             messageElement.appendChild(retractedLabel);
             messageElement.appendChild(originalMessage);
-            messageElement.appendChild(timestamp);
           } else {
             // Normal message display
             messageElement.textContent = msg.message;
@@ -373,15 +366,12 @@
             messageElement.appendChild(timestamp);
 
             if (msg.user_id === userId) {
-              const retractBtnContainer = document.createElement('div');
-              retractBtnContainer.className = 'retract-btn-container';
-              
               const retractBtn = document.createElement('button');
               retractBtn.className = 'retract-btn';
               retractBtn.textContent = 'Retract';
               
               if (expandedNormalMessages.has(msg.message_id)) {
-                retractBtnContainer.style.display = 'block';
+                retractBtn.style.display = 'block';
               }
               
               retractBtn.onclick = async (e) => {
@@ -397,8 +387,7 @@
                 loadMessages();
               };
               
-              retractBtnContainer.appendChild(retractBtn);
-              messageElement.appendChild(retractBtnContainer);
+              messageElement.appendChild(retractBtn);
             }
             
             messageElement.onclick = (e) => {
@@ -408,13 +397,13 @@
                   expandedNormalMessages.delete(messageId);
                   timestamp.style.display = 'none';
                   if (msg.user_id === userId) {
-                    messageElement.querySelector('.retract-btn-container').style.display = 'none';
+                    messageElement.querySelector('.retract-btn').style.display = 'none';
                   }
                 } else {
                   expandedNormalMessages.add(messageId);
                   timestamp.style.display = 'block';
                   if (msg.user_id === userId) {
-                    messageElement.querySelector('.retract-btn-container').style.display = 'block';
+                    messageElement.querySelector('.retract-btn').style.display = 'block';
                   }
                 }
               }
