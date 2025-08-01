@@ -167,41 +167,55 @@
     let lastKnownUpdate = null;
 
     async function loadAvailableUsers() {
-      try {
-        const res = await fetch(`${apiBase}/getUsers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ current_user_id: userId })
-        });
+  try {
+    console.log('Fetching users for:', userId); // Debug current user
+    
+    const res = await fetch(`${apiBase}/getUsers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_user_id: userId })
+    });
 
-        if (!res.ok) throw new Error('Failed to fetch users');
-        
-        const data = await res.json();
-        const convoList = document.getElementById('convoList');
-        convoList.innerHTML = '';
-        
-        if (data.users && data.users.length > 0) {
-          document.getElementById('noConvos').classList.add('hidden');
-          data.users.forEach(user => {
-            const userElement = document.createElement('div');
-            userElement.textContent = user.username;
-            userElement.style.padding = '5px';
-            userElement.style.cursor = 'pointer';
-            userElement.onclick = () => {
-              currentChatUser = user.username;
-              document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
-              loadOrCreateConversation(user.user_id);
-            };
-            convoList.appendChild(userElement);
-          });
-        } else {
-          document.getElementById('noConvos').classList.remove('hidden');
-        }
-      } catch (err) {
-        console.error('Error loading users:', err);
-        document.getElementById('noConvos').classList.remove('hidden');
-      }
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`API Error: ${error}`);
     }
+    
+    const data = await res.json();
+    console.log('API Response:', data); // Debug response
+    
+    const convoList = document.getElementById('convoList');
+    convoList.innerHTML = '';
+    
+    if (!data.users) {
+      throw new Error('Invalid response format - missing users array');
+    }
+
+    if (data.users.length === 0) {
+      document.getElementById('noConvos').classList.remove('hidden');
+      console.log('No other users found'); // Debug empty case
+      return;
+    }
+
+    document.getElementById('noConvos').classList.add('hidden');
+    data.users.forEach(user => {
+      if (!user.user_id || !user.username) {
+        console.warn('Invalid user format:', user);
+        return;
+      }
+      
+      const userElement = document.createElement('div');
+      userElement.textContent = user.username;
+      // ... rest of your element setup ...
+      convoList.appendChild(userElement);
+    });
+
+  } catch (err) {
+    console.error('Error loading users:', err);
+    document.getElementById('noConvos').classList.remove('hidden');
+    document.getElementById('noConvos').textContent = 'Error loading users';
+  }
+}
 
     async function loadOrCreateConversation(otherUserId) {
       try {
