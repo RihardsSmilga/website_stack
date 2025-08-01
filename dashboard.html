@@ -62,13 +62,12 @@
       font-size: 0.8em;
       color: gray;
       display: none;
-      width: 100%;
     }
 
     .action-buttons {
       display: none;
-      width: 100%;
       text-align: right;
+      margin-top: 5px;
     }
 
     .retract-btn, .unretract-btn {
@@ -84,12 +83,11 @@
       font-style: italic;
       color: #888;
       cursor: pointer;
-      width: 100%;
+      display: block;
     }
 
     .original-message {
       display: none;
-      width: 100%;
       padding-top: 5px;
     }
 
@@ -142,6 +140,7 @@
   </style>
 </head>
 <body>
+  <!-- Content remains the same as previous version -->
   <div id="conversations">
     <h3>Conversations</h3>
     <div id="convoList"></div>
@@ -287,7 +286,9 @@
           
           if (msg.retracted) {
             // Retracted message display
-            const retractedLabel = document.createElement('div');
+            const retractedContainer = document.createElement('div');
+            
+            const retractedLabel = document.createElement('span');
             retractedLabel.className = 'retracted-label';
             retractedLabel.textContent = 'retracted';
             
@@ -344,10 +345,12 @@
               }
             };
             
-            messageElement.appendChild(retractedLabel);
-            messageElement.appendChild(timestamp);
-            messageElement.appendChild(originalMessage);
-            messageElement.appendChild(actionButtons);
+            retractedContainer.appendChild(retractedLabel);
+            retractedContainer.appendChild(originalMessage);
+            retractedContainer.appendChild(timestamp);
+            retractedContainer.appendChild(actionButtons);
+            
+            messageElement.appendChild(retractedContainer);
           } else {
             // Normal message display
             messageElement.textContent = msg.message;
@@ -384,19 +387,6 @@
               
               actionButtons.appendChild(retractBtn);
             }
-            
-            messageElement.onclick = () => {
-              const messageId = msg.message_id;
-              if (expandedMessages.has(messageId)) {
-                expandedMessages.delete(messageId);
-                timestamp.style.display = 'none';
-                actionButtons.style.display = 'none';
-              } else {
-                expandedMessages.add(messageId);
-                timestamp.style.display = 'block';
-                actionButtons.style.display = 'block';
-              }
-            };
             
             messageElement.appendChild(timestamp);
             messageElement.appendChild(actionButtons);
