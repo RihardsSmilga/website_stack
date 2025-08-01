@@ -137,6 +137,17 @@
       left: 10px;
       color: black;
     }
+
+    /* Removed gray box from usernames */
+    .convo-user {
+      padding: 5px;
+      cursor: pointer;
+      margin: 2px 0;
+    }
+
+    .convo-user:hover {
+      background-color: #f5f5f5;
+    }
   </style>
 </head>
 <body>
@@ -165,6 +176,7 @@
     let refreshInterval;
     let expandedMessages = new Set();
     let lastKnownUpdate = null;
+    let shouldAutoScroll = true; // Flag for auto-scrolling
 
     // Redirect if not logged in
     if (!userId || !username) {
@@ -206,15 +218,12 @@
           
           const userElement = document.createElement('div');
           userElement.textContent = user.username;
-          userElement.style.padding = '5px';
-          userElement.style.cursor = 'pointer';
-          userElement.style.margin = '2px 0';
-          userElement.style.borderRadius = '4px';
-          userElement.style.backgroundColor = '#f5f5f5';
+          userElement.className = 'convo-user'; // Added class for styling
           
           userElement.onclick = () => {
             currentChatUser = user.username;
             document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
+            shouldAutoScroll = true; // Reset auto-scroll when starting new conversation
             loadOrCreateConversation(user.user_id);
           };
           
@@ -297,7 +306,7 @@
         
         const data = await res.json();
         const list = document.getElementById('messageList');
-        const wasScrolledToBottom = list.scrollHeight - list.scrollTop === list.clientHeight;
+        const wasScrolledToBottom = isScrolledToBottom(list);
         
         if (data.messages && data.messages.length > 0) {
           const newestUpdate = data.messages.reduce((latest, msg) => {
@@ -404,12 +413,18 @@
         }
         document.body.removeChild(tempContainer);
         
-        if (wasScrolledToBottom) {
+        // Auto-scroll if new message from other user or if we were already at bottom
+        if (shouldAutoScroll || wasScrolledToBottom) {
           list.scrollTop = list.scrollHeight;
+          shouldAutoScroll = false;
         }
       } catch (err) {
         console.error('Error loading messages:', err);
       }
+    }
+
+    function isScrolledToBottom(element) {
+      return element.scrollHeight - element.scrollTop === element.clientHeight;
     }
 
     function toggleMessageExpansion(messageId) {
@@ -464,11 +479,21 @@
       })
       .then(() => {
         messageInput.value = '';
+        shouldAutoScroll = true; // Ensure we scroll to bottom after sending
       })
       .catch(err => {
         console.error('Error sending message:', err);
       });
     }
+
+    // Setup message list scroll behavior
+    const messageList = document.getElementById('messageList');
+    messageList.addEventListener('scroll', () => {
+      // Disable auto-scroll if user scrolls up
+      if (!isScrolledToBottom(messageList)) {
+        shouldAutoScroll = false;
+      }
+    });
 
     document.getElementById('sendButton').onclick = sendMessage;
 
