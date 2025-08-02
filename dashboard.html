@@ -318,6 +318,7 @@
   </div>
   <script>
 // Fallback API base URL in case of DNS issues
+// Fallback API base URL in case of DNS issues
 const apiBases = [
   'https://chat-backend.rsmilga08.workers.dev',
   'http://localhost:8787' // Fallback for development
@@ -349,31 +350,60 @@ function isScrolledToBottom(element) {
   return Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
 }
 
+// Fix font issue by applying consistent font family
+function fixFontIssues() {
+  const messageInput = document.getElementById('messageInput');
+  if (messageInput) {
+    // Ensure consistent font family for both text and placeholder
+    messageInput.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+    messageInput.style.fontSize = '16px'; // Prevents zoom on iOS
+    messageInput.style.lineHeight = '1.4';
+  }
+}
+
 if (!userId || !username) {
   window.location.href = 'index.html';
 }
 
-// Test API connection
+// Test API connection with better error handling
 async function testApiConnection() {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     const response = await fetch(`${apiBase}/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
-    console.error('API connection failed:', error);
+    console.error('API connection test failed:', error);
     return false;
   }
 }
 
 // Initialize API connection
 async function initializeApiConnection() {
+  console.log('Testing primary API:', apiBases[0]);
   const isPrimaryApiWorking = await testApiConnection();
+  
   if (!isPrimaryApiWorking && apiBases.length > 1) {
-    apiBase = apiBases[1]; // Switch to fallback
-    console.log('Switched to fallback API:', apiBase);
+    console.log('Primary API failed, trying fallback:', apiBases[1]);
+    apiBase = apiBases[1];
+    const isFallbackWorking = await testApiConnection();
+    
+    if (!isFallbackWorking) {
+      console.error('Both API endpoints are unavailable');
+      document.getElementById('noConvos').textContent = 'Server unavailable. Please try again later.';
+      document.getElementById('noConvos').classList.remove('hidden');
+      return false;
+    }
+    console.log('Using fallback API successfully');
   }
+  return true;
 }
 
 // Mobile navigation
@@ -384,46 +414,118 @@ function toggleConversationList() {
 document.getElementById('backButton').addEventListener('click', toggleConversationList);
 
 async function loadAvailableUsers() {
+  const noConvosEl = document.getElementById('noConvos');
+  const convoList = document.getElementById('convoList');
+  
   try {
-    document.getElementById('noConvos').textContent = 'Loading users...';
-    document.getElementById('noConvos').classList.remove('hidden');
+    noConvosEl.textContent = 'Loading users...';
+    noConvosEl.classList.remove('hidden');
+    convoList.innerHTML = '';
+
+    console.log('Requesting users from:', `${apiBase}/getUsers`);
+    console.log('Current user ID:', userId);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(`${apiBase}/getUsers`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify({ current_user_id: userId }),
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
+    console.log('Response status:', res.status);
+    console.log('Response ok:', res.ok);
+
     if (!res.ok) {
-      const error = await res.text();
-      throw new Error(`API Error: ${error}`);
+      const errorText = await res.text();
+      console.error('API Error Response:', errorText);
+      throw new Error(`Server responded with ${res.status}: ${errorText || 'Unknown error'}`);
     }
 
-    const data = await res.json();
-    const convoList = document.getElementById('convoList');
-    convoList.innerHTML = '';
+    const responseText = await res.text();
+    console.log('Raw response text:', responseText);
 
-    if (!data.users) {
-      throw new Error('Invalid response format');
+    if (!responseText.trim()) {
+      throw new Error('Empty response from server');
     }
 
-    if (data.users.length === 0) {
-      document.getElementById('noConvos').textContent = 'No users found';
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('Parsed response data:', data);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError);
+      console.error('Response that failed to parse:', responseText);
+      throw new Error('Server returned invalid JSON');
+    }
+
+    // Handle error responses
+    if (data.error) {
+      console.error('API returned error:', data.error);
+      throw new Error(data.error);
+    }
+
+    // Extract users from various possible response formats
+    let users = [];
+    if (data.users && Array.isArray(data.users)) {
+      users = data.users;
+    } else if (data.data && Array.isArray(data.data)) {
+      users = data.data;
+    } else if (Array.isArray(data)) {
+      users = data;
+    } else if (data.result && Array.isArray(data.result)) {
+      users = data.result;
+    } else {
+      console.error('Unexpected response structure:', data);
+      throw new Error('Unexpected response format from server');
+    }
+
+    console.log('Extracted users array:', users);
+
+    if (!Array.isArray(users)) {
+      throw new Error('Users data is not an array');
+    }
+
+    if (users.length === 0) {
+      noConvosEl.textContent = 'No other users found';
+      noConvosEl.classList.remove('hidden');
       return;
     }
 
-    document.getElementById('noConvos').classList.add('hidden');
-    data.users.forEach((user) => {
-      if (!user.user_id || !user.username) return;
+    // Hide the "no convos" message
+    noConvosEl.classList.add('hidden');
+    
+    // Create user elements
+    users.forEach((user, index) => {
+      console.log(`Processing user ${index}:`, user);
+      
+      // Handle different possible field names based on your Supabase structure
+      const userIdField = user.user_id || user.id || user.userId;
+      const usernameField = user.username || user.name || user.userName;
+      
+      if (!userIdField || !usernameField) {
+        console.warn('Skipping invalid user object:', user);
+        return;
+      }
+
+      console.log(`Creating element for user: ${usernameField} (ID: ${userIdField})`);
 
       const userElement = document.createElement('div');
-      userElement.textContent = user.username;
+      userElement.textContent = usernameField;
       userElement.className = 'convo-user';
 
       userElement.onclick = () => {
-        currentChatUser = user.username;
-        currentChatUserId = user.user_id;
-        document.getElementById('currentChatUserText').textContent = user.username;
+        console.log(`Selected user: ${usernameField} (ID: ${userIdField})`);
+        currentChatUser = usernameField;
+        currentChatUserId = userIdField;
+        document.getElementById('currentChatUserText').textContent = usernameField;
         shouldAutoScroll = true;
         
         // On mobile, hide conversation list after selection
@@ -431,20 +533,46 @@ async function loadAvailableUsers() {
           toggleConversationList();
         }
         
-        loadOrCreateConversation(user.user_id);
+        loadOrCreateConversation(userIdField);
       };
 
       convoList.appendChild(userElement);
     });
+
+    console.log(`Successfully loaded ${users.length} users`);
+
   } catch (err) {
-    console.error('Error loading users:', err);
-    document.getElementById('noConvos').classList.remove('hidden');
-    document.getElementById('noConvos').textContent = 'Failed to load users. Please check your connection.';
+    console.error('Complete error in loadAvailableUsers:', err);
+    console.error('Error stack:', err.stack);
+    
+    noConvosEl.classList.remove('hidden');
+    convoList.innerHTML = '';
+    
+    if (err.name === 'AbortError') {
+      noConvosEl.textContent = 'Request timed out. Please check your connection and try again.';
+    } else if (err.message.includes('fetch') || err.message.includes('network')) {
+      noConvosEl.textContent = 'Network error. Please check your internet connection.';
+    } else if (err.message.includes('JSON')) {
+      noConvosEl.textContent = 'Server error. Please try again later.';
+    } else {
+      noConvosEl.textContent = `Error: ${err.message}`;
+    }
+    
+    // Try to reinitialize API connection
+    setTimeout(async () => {
+      const apiWorking = await initializeApiConnection();
+      if (apiWorking) {
+        console.log('API reconnected, retrying...');
+        loadAvailableUsers();
+      }
+    }, 2000);
   }
 }
 
 async function loadOrCreateConversation(otherUserId) {
   try {
+    console.log(`Creating/loading conversation between ${userId} and ${otherUserId}`);
+    
     // Clear previous state
     const messageList = document.getElementById('messageList');
     const noMessagesEl = document.getElementById('noMessages');
@@ -465,9 +593,14 @@ async function loadOrCreateConversation(otherUserId) {
       body: JSON.stringify({ user1: userId, user2: otherUserId }),
     });
 
-    if (!res.ok) throw new Error('Failed to find/create conversation');
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Failed to find/create conversation: ${errorText}`);
+    }
 
     const data = await res.json();
+    console.log('Conversation data:', data);
+    
     currentConvo = data.convo_id;
     lastKnownUpdate = null;
     previousMessageCount = 0;
@@ -483,9 +616,9 @@ async function loadOrCreateConversation(otherUserId) {
   } catch (err) {
     console.error('Error loading conversation:', err);
     const noMessagesEl = document.getElementById('noMessages');
+    noMessagesEl.textContent = `Failed to load conversation: ${err.message}`;
     noMessagesEl.style.display = 'block';
     noMessagesEl.classList.remove('hidden');
-    alert('Failed to start conversation. Please check your connection.');
   }
 }
 
@@ -561,6 +694,7 @@ async function loadMessages() {
 
     // Check if there are no messages
     if (!data.messages || data.messages.length === 0) {
+      noMessagesEl.textContent = 'No messages in this chat yet';
       noMessagesEl.style.display = 'block';
       noMessagesEl.classList.remove('hidden');
       return;
@@ -575,7 +709,7 @@ async function loadMessages() {
     }
     previousMessageCount = data.messages.length;
 
-    // Update lastKnownUpdate
+    // Update lastKnownUpdate based on your database structure
     const newestUpdate = data.messages.reduce((latest, msg) => {
       const msgTime = new Date(msg.updated_at || msg.timestamp);
       return msgTime > latest ? msgTime : latest;
@@ -676,6 +810,7 @@ async function loadMessages() {
     const list = document.getElementById('messageList');
     const noMessagesEl = document.getElementById('noMessages');
     list.innerHTML = '';
+    noMessagesEl.textContent = `Error loading messages: ${err.message}`;
     noMessagesEl.style.display = 'block';
     noMessagesEl.classList.remove('hidden');
   }
@@ -697,7 +832,7 @@ async function retractMessage(messageId, isCurrentlyRetracted) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message_id: messageId,
-        retracted: isCurrentlyRetracted,
+        retracted: !isCurrentlyRetracted, // Toggle the current state
       }),
     });
 
@@ -731,14 +866,19 @@ function sendMessage() {
       message,
     }),
   })
-    .then(() => {
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error('Failed to send message');
+      }
       messageInput.value = '';
+      messageInput.style.height = 'auto'; // Reset height
       shouldAutoScroll = true;
       // Immediately check for updates to show the new message
       setTimeout(checkForUpdates, 100);
     })
     .catch((err) => {
       console.error('Error sending message:', err);
+      alert('Failed to send message. Please try again.');
     });
 }
 
@@ -766,8 +906,20 @@ document.getElementById('messageInput').addEventListener('keypress', (e) => {
 });
 
 // Initialize
-initializeApiConnection().then(() => {
-  loadAvailableUsers();
+async function initialize() {
+  console.log('Initializing chat application...');
+  
+  // Fix font issues first
+  fixFontIssues();
+  
+  const apiInitialized = await initializeApiConnection();
+  if (!apiInitialized) {
+    console.error('Failed to initialize API connection');
+    return;
+  }
+  
+  console.log('API initialized, loading users...');
+  await loadAvailableUsers();
   
   // Handle mobile layout
   setTimeout(() => {
@@ -783,7 +935,9 @@ initializeApiConnection().then(() => {
       document.getElementById('conversations').classList.add('active');
     }
   }, 100);
-});
+}
+
+initialize();
 
 window.addEventListener('beforeunload', () => {
   if (refreshInterval) clearInterval(refreshInterval);
