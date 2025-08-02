@@ -221,7 +221,131 @@
     let shouldAutoScroll = true;
     let previousMessageCount = 0;
 
-    // ... (keep all your existing helper functions the same until loadMessages) ...
+    function formatDateTime(dateString) {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = String(date.getFullYear()).slice(-2);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+    }
+
+    function isScrolledToBottom(element) {
+      return Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
+    }
+
+    if (!userId || !username) {
+      window.location.href = 'index.html';
+    }
+
+    async function loadAvailableUsers() {
+      try {
+        document.getElementById('noConvos').textContent = 'Loading users...';
+        document.getElementById('noConvos').classList.remove('hidden');
+        
+        const res = await fetch(`${apiBase}/getUsers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_user_id: userId })
+        });
+
+        if (!res.ok) {
+          const error = await res.text();
+          throw new Error(`API Error: ${error}`);
+        }
+        
+        const data = await res.json();
+        const convoList = document.getElementById('convoList');
+        convoList.innerHTML = '';
+        
+        if (!data.users) {
+          throw new Error('Invalid response format');
+        }
+
+        if (data.users.length === 0) {
+          document.getElementById('noConvos').textContent = 'No users found';
+          return;
+        }
+
+        document.getElementById('noConvos').classList.add('hidden');
+        data.users.forEach(user => {
+          if (!user.user_id || !user.username) return;
+          
+          const userElement = document.createElement('div');
+          userElement.textContent = user.username;
+          userElement.className = 'convo-user';
+          
+          userElement.onclick = () => {
+            currentChatUser = user.username;
+            document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
+            shouldAutoScroll = true;
+            loadOrCreateConversation(user.user_id);
+          };
+          
+          convoList.appendChild(userElement);
+        });
+
+      } catch (err) {
+        console.error('Error loading users:', err);
+        document.getElementById('noConvos').classList.remove('hidden');
+        document.getElementById('noConvos').textContent = 'Failed to load users';
+      }
+    }
+
+    async function loadOrCreateConversation(otherUserId) {
+      try {
+        const res = await fetch(`${apiBase}/findOrCreateConvo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user1: userId, user2: otherUserId })
+        });
+
+        if (!res.ok) throw new Error('Failed to find/create conversation');
+        
+        const data = await res.json();
+        currentConvo = data.convo_id;
+        lastKnownUpdate = null;
+        previousMessageCount = 0;
+        
+        document.getElementById('noConvoSelected').classList.add('hidden');
+        document.getElementById('inputSection').classList.remove('hidden');
+        
+        startAutoRefresh();
+        loadMessages();
+      } catch (err) {
+        console.error('Error loading conversation:', err);
+        alert('Failed to start conversation');
+      }
+    }
+
+    async function checkForUpdates() {
+      if (!currentConvo) return;
+      
+      try {
+        const res = await fetch(`${apiBase}/getLastUpdate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ convo_id: currentConvo })
+        });
+
+        if (!res.ok) throw new Error('Failed to check updates');
+        
+        const data = await res.json();
+        
+        if (!lastKnownUpdate || (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate))) {
+          loadMessages();
+        }
+      } catch (err) {
+        console.error('Error checking updates:', err);
+      }
+    }
+
+    function startAutoRefresh() {
+      if (refreshInterval) clearInterval(refreshInterval);
+      refreshInterval = setInterval(checkForUpdates, 1000);
+    }
 
     async function loadMessages() {
       if (!currentConvo) return;
@@ -370,7 +494,86 @@
       }
     }
 
-    // ... (keep all your remaining functions the same) ...
+    function toggleMessageExpansion(messageId) {
+      if (expandedMessages.has(messageId)) {
+        expandedMessages.delete(messageId);
+      } else {
+        expandedMessages.add(messageId);
+      }
+      loadMessages();
+    }
+
+    async function retractMessage(messageId, isCurrentlyRetracted) {
+      try {
+        const res = await fetch(`${apiBase}/toggleRetract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message_id: messageId, 
+            retracted: isCurrentlyRetracted 
+          })
+        });
+
+        if (!res.ok) throw new Error('Failed to toggle retract');
+        
+        const data = await res.json();
+        lastKnownUpdate = data.updated_at;
+        await loadMessages();
+        
+        if (expandedMessages.has(messageId)) {
+          expandedMessages.delete(messageId);
+          expandedMessages.add(messageId);
+        }
+      } catch (err) {
+        console.error('Error toggling retract:', err);
+      }
+    }
+
+    function sendMessage() {
+      const messageInput = document.getElementById('messageInput');
+      const message = messageInput.value.trim();
+      
+      if (!message || !currentConvo) return;
+      
+      fetch(`${apiBase}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          convo_id: currentConvo, 
+          user_id: userId, 
+          message 
+        })
+      })
+      .then(() => {
+        messageInput.value = '';
+        shouldAutoScroll = true;
+      })
+      .catch(err => {
+        console.error('Error sending message:', err);
+      });
+    }
+
+    const messageList = document.getElementById('messageList');
+    messageList.addEventListener('scroll', () => {
+      if (!isScrolledToBottom(messageList)) {
+        shouldAutoScroll = false;
+      }
+    });
+
+    document.getElementById('sendButton').onclick = sendMessage;
+
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    // Initialize the dashboard
+    loadAvailableUsers();
+
+    window.addEventListener('beforeunload', () => {
+      if (refreshInterval) clearInterval(refreshInterval);
+    });
   </script>
 </body>
 </html>
