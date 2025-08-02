@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -8,6 +10,7 @@
       height: 100vh;
       display: flex;
       flex-direction: column;
+      -webkit-text-size-adjust: 100%;
     }
 
     #main-container {
@@ -15,6 +18,7 @@
       flex: 1;
       overflow: hidden;
       flex-direction: column;
+      position: relative;
     }
 
     @media (min-width: 768px) {
@@ -28,13 +32,17 @@
       border-right: 1px solid #ccc;
       overflow-y: auto;
       flex-shrink: 0;
-      height: 150px;
+      max-height: 40vh;
+      background: white;
+      z-index: 10;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
 
     @media (min-width: 768px) {
       #conversations {
         width: 25%;
-        height: auto;
+        max-height: none;
+        box-shadow: none;
       }
     }
 
@@ -44,43 +52,67 @@
       flex-direction: column;
       position: relative;
       overflow: hidden;
+      background: #f9f9f9;
     }
 
     #currentChatUser {
-      font-size: 1.2em;
-      margin-bottom: 10px;
+      font-size: 1.1em;
+      margin-bottom: 5px;
       font-weight: bold;
       padding: 10px;
+      background: white;
+      border-bottom: 1px solid #eee;
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     #messageList {
       flex: 1;
       overflow-y: auto;
-      padding: 10px;
+      padding: 10px 5px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    @media (min-width: 768px) {
+      #messageList {
+        padding: 10px;
+      }
     }
 
     #inputSection {
       display: flex;
-      padding: 10px;
+      padding: 8px;
       border-top: 1px solid #ccc;
+      background: white;
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
     }
 
     #messageInput {
       flex: 1;
-      padding: 8px;
+      padding: 10px;
       font-size: 1em;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 20px;
+      min-height: 40px;
+      max-height: 100px;
+      resize: none;
+      outline: none;
     }
 
     #sendButton {
-      padding: 8px 16px;
+      padding: 0 15px;
       background-color: black;
       color: white;
       border: none;
-      border-radius: 4px;
+      border-radius: 20px;
       cursor: pointer;
-      margin-left: 10px;
+      margin-left: 8px;
+      height: 40px;
+      min-width: 60px;
+      font-size: 0.9em;
     }
 
     /* Message styles */
@@ -94,22 +126,40 @@
       align-self: flex-start;
       text-align: left;
       margin-right: auto;
-      max-width: 80%;
+      max-width: 85%;
       cursor: pointer;
+      background: white;
+      padding: 8px 12px;
+      border-radius: 15px;
+      border-bottom-left-radius: 0;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+      word-break: break-word;
     }
 
     .my-message {
       align-self: flex-end;
       text-align: right;
       margin-left: auto;
-      max-width: 80%;
+      max-width: 85%;
       cursor: pointer;
+      background: #007aff;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 15px;
+      border-bottom-right-radius: 0;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+      word-break: break-word;
     }
 
     .timestamp {
-      font-size: 0.8em;
-      color: gray;
+      font-size: 0.7em;
+      color: #999;
       display: none;
+      margin-top: 3px;
+    }
+
+    .my-message .timestamp {
+      color: rgba(255,255,255,0.7);
     }
 
     .action-buttons {
@@ -120,12 +170,18 @@
 
     .retract-btn,
     .unretract-btn {
-      font-size: 0.75em;
-      padding: 2px 5px;
-      background: #f0f0f0;
-      border: 1px solid #ccc;
+      font-size: 0.7em;
+      padding: 3px 8px;
+      background: rgba(0,0,0,0.1);
+      border: none;
+      border-radius: 10px;
       cursor: pointer;
       margin-left: 5px;
+    }
+
+    .my-message .retract-btn {
+      background: rgba(255,255,255,0.2);
+      color: white;
     }
 
     .retracted-label {
@@ -133,11 +189,14 @@
       color: #888;
       cursor: pointer;
       display: block;
+      font-size: 0.9em;
     }
 
     .original-message {
       display: none;
       padding-top: 5px;
+      color: #666;
+      font-size: 0.9em;
     }
 
     .hidden {
@@ -146,9 +205,10 @@
 
     #noConvos {
       margin-top: 10px;
-      color: black;
+      color: #666;
       font-style: italic;
-      padding: 10px;
+      padding: 15px;
+      text-align: center;
     }
 
     #noConvoSelected {
@@ -156,61 +216,133 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      color: black;
+      color: #888;
       text-align: center;
       width: 100%;
+      padding: 0 20px;
+      box-sizing: border-box;
     }
 
     .convo-user {
-      padding: 10px;
+      padding: 12px 15px;
       cursor: pointer;
       border-bottom: 1px solid #eee;
+      transition: background 0.2s;
+    }
+
+    .convo-user:active {
+      background: #f0f0f0;
     }
 
     h3 {
-      padding: 10px;
+      padding: 12px 15px;
       margin: 0;
       border-bottom: 1px solid #ccc;
+      background: white;
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     #noMessages {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #888;
-  font-style: italic;
-  text-align: center;
-  width: 100%;
-  display: none;
-  }
-  </style>
-  </head>
-  <body>
-    <div id="main-container">
-      <div id="conversations">
-        <h3>Conversations</h3>
-        <div id="convoList"></div>
-        <div id="noConvos" class="hidden">No users found.</div>
-      </div>
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      font-style: italic;
+      text-align: center;
+      width: 100%;
+      display: none;
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
 
-      <div id="messages">
-        <div id="currentChatUser"></div>
-        <div id="noConvoSelected">No conversation selected</div>
-        <div id="noMessages" class="hidden">No messages in this chat yet</div>
-        <div id="messageList"></div>
-        <div id="inputSection" class="hidden">
-          <input type="text" id="messageInput" placeholder="Type your message..." />
-          <button id="sendButton">Send</button>
-        </div>
+    /* Mobile-specific styles */
+    @media (max-width: 767px) {
+      #conversations {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: none;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 20;
+      }
+      
+      #conversations.active {
+        transform: translateX(0);
+      }
+      
+      #messages {
+        width: 100%;
+      }
+      
+      .back-button {
+        display: inline-block;
+        margin-right: 10px;
+        cursor: pointer;
+      }
+      
+      #currentChatUser {
+        display: flex;
+        align-items: center;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .back-button {
+        display: none;
+      }
+    }
+
+    /* Loading indicator */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0,0,0,0.1);
+      border-radius: 50%;
+      border-top-color: black;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="main-container">
+    <div id="conversations">
+      <h3>Conversations</h3>
+      <div id="convoList"></div>
+      <div id="noConvos" class="hidden">No users found.</div>
+    </div>
+
+    <div id="messages">
+      <div id="currentChatUser">
+        <span class="back-button" id="backButton">←</span>
+        <span id="currentChatUserText">No conversation selected</span>
+      </div>
+      <div id="noConvoSelected">Select a conversation to start chatting</div>
+      <div id="noMessages" class="hidden">No messages in this chat yet</div>
+      <div id="messageList"></div>
+      <div id="inputSection" class="hidden">
+        <textarea id="messageInput" placeholder="Type your message..." rows="1"></textarea>
+        <button id="sendButton">Send</button>
       </div>
     </div>
-    <script>
+  </div>
+  <script>
 const apiBase = 'https://chat-backend.rsmilga08.workers.dev';
 const userId = parseInt(sessionStorage.getItem('user_id'), 10);
 const username = sessionStorage.getItem('username');
 let currentConvo = null;
 let currentChatUser = null;
+let currentChatUserId = null;
 let refreshInterval;
 let expandedMessages = new Set();
 let lastKnownUpdate = null;
@@ -224,8 +356,7 @@ function formatDateTime(dateString) {
   const year = String(date.getFullYear()).slice(-2);
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 function isScrolledToBottom(element) {
@@ -235,6 +366,13 @@ function isScrolledToBottom(element) {
 if (!userId || !username) {
   window.location.href = 'index.html';
 }
+
+// Mobile navigation
+function toggleConversationList() {
+  document.getElementById('conversations').classList.toggle('active');
+}
+
+document.getElementById('backButton').addEventListener('click', toggleConversationList);
 
 async function loadAvailableUsers() {
   try {
@@ -275,8 +413,15 @@ async function loadAvailableUsers() {
 
       userElement.onclick = () => {
         currentChatUser = user.username;
-        document.getElementById('currentChatUser').textContent = `Chatting with: ${user.username}`;
+        currentChatUserId = user.user_id;
+        document.getElementById('currentChatUserText').textContent = user.username;
         shouldAutoScroll = true;
+        
+        // On mobile, hide conversation list after selection
+        if (window.innerWidth < 768) {
+          toggleConversationList();
+        }
+        
         loadOrCreateConversation(user.user_id);
       };
 
@@ -591,6 +736,13 @@ function sendMessage() {
     });
 }
 
+// Auto-resize textarea
+const messageInput = document.getElementById('messageInput');
+messageInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = (this.scrollHeight) + 'px';
+});
+
 // Event listeners
 const messageList = document.getElementById('messageList');
 messageList.addEventListener('scroll', () => {
@@ -601,7 +753,10 @@ messageList.addEventListener('scroll', () => {
 
 document.getElementById('sendButton').onclick = sendMessage;
 document.getElementById('messageInput').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendMessage();
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
 
 // Initialize
@@ -609,6 +764,14 @@ loadAvailableUsers();
 window.addEventListener('beforeunload', () => {
   if (refreshInterval) clearInterval(refreshInterval);
 });
-    </script>
-  </body>
+
+// Handle mobile back button
+document.addEventListener('DOMContentLoaded', function() {
+  // Show conversation list by default on mobile if no conversation is selected
+  if (window.innerWidth < 768 && !currentConvo) {
+    document.getElementById('conversations').classList.add('active');
+  }
+});
+  </script>
+</body>
 </html>
