@@ -319,6 +319,7 @@
   <script>
 // Fallback API base URL in case of DNS issues
 // Fallback API base URL in case of DNS issues
+// Fallback API base URL in case of DNS issues
 const apiBases = [
   'https://chat-backend.rsmilga08.workers.dev',
   'http://localhost:8787' // Fallback for development
@@ -365,47 +366,6 @@ if (!userId || !username) {
   window.location.href = 'index.html';
 }
 
-// Test API connection with better error handling
-async function testApiConnection() {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const response = await fetch(`${apiBase}/health`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch (error) {
-    console.error('API connection test failed:', error);
-    return false;
-  }
-}
-
-// Initialize API connection
-async function initializeApiConnection() {
-  console.log('Testing primary API:', apiBases[0]);
-  const isPrimaryApiWorking = await testApiConnection();
-  
-  if (!isPrimaryApiWorking && apiBases.length > 1) {
-    console.log('Primary API failed, trying fallback:', apiBases[1]);
-    apiBase = apiBases[1];
-    const isFallbackWorking = await testApiConnection();
-    
-    if (!isFallbackWorking) {
-      console.error('Both API endpoints are unavailable');
-      document.getElementById('noConvos').textContent = 'Server unavailable. Please try again later.';
-      document.getElementById('noConvos').classList.remove('hidden');
-      return false;
-    }
-    console.log('Using fallback API successfully');
-  }
-  return true;
-}
-
 // Mobile navigation
 function toggleConversationList() {
   document.getElementById('conversations').classList.toggle('active');
@@ -446,6 +406,14 @@ async function loadAvailableUsers() {
     if (!res.ok) {
       const errorText = await res.text();
       console.error('API Error Response:', errorText);
+      
+      // Try fallback API if primary fails
+      if (apiBase === apiBases[0] && apiBases.length > 1) {
+        console.log('Trying fallback API...');
+        apiBase = apiBases[1];
+        return loadAvailableUsers(); // Retry with fallback
+      }
+      
       throw new Error(`Server responded with ${res.status}: ${errorText || 'Unknown error'}`);
     }
 
@@ -472,16 +440,12 @@ async function loadAvailableUsers() {
       throw new Error(data.error);
     }
 
-    // Extract users from various possible response formats
+    // Extract users from response (your API returns {users: [...]} format)
     let users = [];
     if (data.users && Array.isArray(data.users)) {
       users = data.users;
-    } else if (data.data && Array.isArray(data.data)) {
-      users = data.data;
     } else if (Array.isArray(data)) {
       users = data;
-    } else if (data.result && Array.isArray(data.result)) {
-      users = data.result;
     } else {
       console.error('Unexpected response structure:', data);
       throw new Error('Unexpected response format from server');
@@ -506,9 +470,9 @@ async function loadAvailableUsers() {
     users.forEach((user, index) => {
       console.log(`Processing user ${index}:`, user);
       
-      // Handle different possible field names based on your Supabase structure
-      const userIdField = user.user_id || user.id || user.userId;
-      const usernameField = user.username || user.name || user.userName;
+      // Your API returns user_id and username fields
+      const userIdField = user.user_id;
+      const usernameField = user.username;
       
       if (!userIdField || !usernameField) {
         console.warn('Skipping invalid user object:', user);
@@ -557,15 +521,6 @@ async function loadAvailableUsers() {
     } else {
       noConvosEl.textContent = `Error: ${err.message}`;
     }
-    
-    // Try to reinitialize API connection
-    setTimeout(async () => {
-      const apiWorking = await initializeApiConnection();
-      if (apiWorking) {
-        console.log('API reconnected, retrying...');
-        loadAvailableUsers();
-      }
-    }, 2000);
   }
 }
 
@@ -832,7 +787,7 @@ async function retractMessage(messageId, isCurrentlyRetracted) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message_id: messageId,
-        retracted: !isCurrentlyRetracted, // Toggle the current state
+        retracted: isCurrentlyRetracted, // Pass current state, API will toggle it
       }),
     });
 
@@ -912,13 +867,7 @@ async function initialize() {
   // Fix font issues first
   fixFontIssues();
   
-  const apiInitialized = await initializeApiConnection();
-  if (!apiInitialized) {
-    console.error('Failed to initialize API connection');
-    return;
-  }
-  
-  console.log('API initialized, loading users...');
+  console.log('Loading users...');
   await loadAvailableUsers();
   
   // Handle mobile layout
