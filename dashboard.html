@@ -3,6 +3,9 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -12,6 +15,7 @@
       flex-direction: column;
       -webkit-text-size-adjust: 100%;
       background: white;
+      overflow: hidden;
     }
 
     #main-container {
@@ -20,6 +24,7 @@
       overflow: hidden;
       flex-direction: column;
       position: relative;
+      height: calc(100% - env(safe-area-inset-bottom));
     }
 
     @media (min-width: 768px) {
@@ -54,14 +59,12 @@
       position: relative;
       overflow: hidden;
       background: white;
-      padding-bottom: env(safe-area-inset-bottom);
     }
 
     #currentChatUser {
       font-size: 1.1em;
-      margin-bottom: 5px;
       font-weight: bold;
-      padding: 10px;
+      padding: 15px;
       background: white;
       border-bottom: 1px solid #eee;
       position: sticky;
@@ -72,25 +75,25 @@
     #messageList {
       flex: 1;
       overflow-y: auto;
-      padding: 10px 5px;
+      padding: 10px 15px;
       -webkit-overflow-scrolling: touch;
     }
 
     @media (min-width: 768px) {
       #messageList {
-        padding: 10px;
+        padding: 15px;
       }
     }
 
     #inputSection {
       display: flex;
-      padding: 8px;
+      padding: 10px;
       border-top: 1px solid #ccc;
       background: white;
       position: sticky;
       bottom: 0;
       z-index: 5;
-      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      align-items: center;
     }
 
     #messageInput {
@@ -100,10 +103,11 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       min-height: 40px;
-      max-height: 100px;
+      max-height: 120px;
       resize: none;
       outline: none;
       background: white;
+      margin-right: 10px;
     }
 
     #sendButton {
@@ -113,16 +117,15 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      margin-left: 8px;
       height: 40px;
       min-width: 60px;
       font-size: 0.9em;
     }
 
-    /* Message styles - modified to look like computer version */
+    /* Message styles - plain text version */
     .message-container {
       display: flex;
-      margin-bottom: 10px;
+      margin-bottom: 15px;
       width: 100%;
     }
 
@@ -133,8 +136,8 @@
       max-width: 85%;
       cursor: pointer;
       color: black;
-      padding: 2px 0;
       word-break: break-word;
+      line-height: 1.4;
     }
 
     .my-message {
@@ -144,8 +147,8 @@
       max-width: 85%;
       cursor: pointer;
       color: black;
-      padding: 2px 0;
       word-break: break-word;
+      line-height: 1.4;
     }
 
     .timestamp {
@@ -278,27 +281,16 @@
         display: flex;
         align-items: center;
       }
+
+      #inputSection {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      }
     }
 
     @media (min-width: 768px) {
       .back-button {
         display: none;
       }
-    }
-
-    /* Loading indicator */
-    .loading {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(0,0,0,0.1);
-      border-radius: 50%;
-      border-top-color: black;
-      animation: spin 1s ease-in-out infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -325,7 +317,13 @@
     </div>
   </div>
   <script>
-const apiBase = 'https://chat-backend.rsmilga08.workers.dev';
+// Fallback API base URL in case of DNS issues
+const apiBases = [
+  'https://chat-backend.rsmilga08.workers.dev',
+  'http://localhost:8787' // Fallback for development
+];
+let apiBase = apiBases[0];
+
 const userId = parseInt(sessionStorage.getItem('user_id'), 10);
 const username = sessionStorage.getItem('username');
 let currentConvo = null;
@@ -353,6 +351,29 @@ function isScrolledToBottom(element) {
 
 if (!userId || !username) {
   window.location.href = 'index.html';
+}
+
+// Test API connection
+async function testApiConnection() {
+  try {
+    const response = await fetch(`${apiBase}/health`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('API connection failed:', error);
+    return false;
+  }
+}
+
+// Initialize API connection
+async function initializeApiConnection() {
+  const isPrimaryApiWorking = await testApiConnection();
+  if (!isPrimaryApiWorking && apiBases.length > 1) {
+    apiBase = apiBases[1]; // Switch to fallback
+    console.log('Switched to fallback API:', apiBase);
+  }
 }
 
 // Mobile navigation
@@ -418,7 +439,7 @@ async function loadAvailableUsers() {
   } catch (err) {
     console.error('Error loading users:', err);
     document.getElementById('noConvos').classList.remove('hidden');
-    document.getElementById('noConvos').textContent = 'Failed to load users';
+    document.getElementById('noConvos').textContent = 'Failed to load users. Please check your connection.';
   }
 }
 
@@ -464,7 +485,7 @@ async function loadOrCreateConversation(otherUserId) {
     const noMessagesEl = document.getElementById('noMessages');
     noMessagesEl.style.display = 'block';
     noMessagesEl.classList.remove('hidden');
-    alert('Failed to start conversation');
+    alert('Failed to start conversation. Please check your connection.');
   }
 }
 
@@ -531,7 +552,6 @@ async function loadMessages() {
     }
 
     const data = await res.json();
-    console.log('Messages data:', data); // Debug log
     const list = document.getElementById('messageList');
     const noMessagesEl = document.getElementById('noMessages');
     const wasScrolledToBottom = isScrolledToBottom(list);
@@ -541,14 +561,12 @@ async function loadMessages() {
 
     // Check if there are no messages
     if (!data.messages || data.messages.length === 0) {
-      console.log('No messages found, showing noMessages element'); // Debug log
       noMessagesEl.style.display = 'block';
       noMessagesEl.classList.remove('hidden');
       return;
     }
 
     // Hide "no messages" if we have messages
-    console.log('Messages found:', data.messages.length); // Debug log
     noMessagesEl.style.display = 'none';
     noMessagesEl.classList.add('hidden');
 
@@ -748,24 +766,27 @@ document.getElementById('messageInput').addEventListener('keypress', (e) => {
 });
 
 // Initialize
-loadAvailableUsers();
-window.addEventListener('beforeunload', () => {
-  if (refreshInterval) clearInterval(refreshInterval);
-});
-
-// Handle mobile back button
-document.addEventListener('DOMContentLoaded', function() {
-  // Show conversation list by default on mobile if no conversation is selected
-  if (window.innerWidth < 768 && !currentConvo) {
-    document.getElementById('conversations').classList.add('active');
-  }
+initializeApiConnection().then(() => {
+  loadAvailableUsers();
   
-  // Ensure viewport is properly sized on mobile
+  // Handle mobile layout
   setTimeout(() => {
-    window.scrollTo(0, 0);
+    // Ensure proper viewport height
     document.documentElement.style.height = '100%';
     document.body.style.height = '100%';
+    
+    // Reset scroll position
+    window.scrollTo(0, 0);
+    
+    // Show conversation list by default on mobile if no conversation is selected
+    if (window.innerWidth < 768 && !currentConvo) {
+      document.getElementById('conversations').classList.add('active');
+    }
   }, 100);
+});
+
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
 });
   </script>
 </body>
