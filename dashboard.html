@@ -292,8 +292,12 @@ async function loadAvailableUsers() {
 async function loadOrCreateConversation(otherUserId) {
   try {
     // Clear previous state
-    document.getElementById('messageList').innerHTML = '';
-    document.getElementById('noMessages').classList.add('hidden');
+    const messageList = document.getElementById('messageList');
+    const noMessagesEl = document.getElementById('noMessages');
+    
+    messageList.innerHTML = '';
+    noMessagesEl.style.display = 'none';
+    noMessagesEl.classList.add('hidden');
     
     // Stop any existing refresh interval
     if (refreshInterval) {
@@ -324,7 +328,9 @@ async function loadOrCreateConversation(otherUserId) {
     startAutoRefresh();
   } catch (err) {
     console.error('Error loading conversation:', err);
-    document.getElementById('noMessages').classList.remove('hidden');
+    const noMessagesEl = document.getElementById('noMessages');
+    noMessagesEl.style.display = 'block';
+    noMessagesEl.classList.remove('hidden');
     alert('Failed to start conversation');
   }
 }
@@ -392,7 +398,9 @@ async function loadMessages() {
     }
 
     const data = await res.json();
+    console.log('Messages data:', data); // Debug log
     const list = document.getElementById('messageList');
+    const noMessagesEl = document.getElementById('noMessages');
     const wasScrolledToBottom = isScrolledToBottom(list);
 
     // Always clear the message list first
@@ -400,12 +408,16 @@ async function loadMessages() {
 
     // Check if there are no messages
     if (!data.messages || data.messages.length === 0) {
-      document.getElementById('noMessages').classList.remove('hidden');
+      console.log('No messages found, showing noMessages element'); // Debug log
+      noMessagesEl.style.display = 'block';
+      noMessagesEl.classList.remove('hidden');
       return;
     }
 
     // Hide "no messages" if we have messages
-    document.getElementById('noMessages').classList.add('hidden');
+    console.log('Messages found:', data.messages.length); // Debug log
+    noMessagesEl.style.display = 'none';
+    noMessagesEl.classList.add('hidden');
 
     if (data.messages.length > previousMessageCount) {
       shouldAutoScroll = true;
@@ -510,8 +522,11 @@ async function loadMessages() {
     }
   } catch (err) {
     console.error('Error loading messages:', err);
-    document.getElementById('messageList').innerHTML = '';
-    document.getElementById('noMessages').classList.remove('hidden');
+    const list = document.getElementById('messageList');
+    const noMessagesEl = document.getElementById('noMessages');
+    list.innerHTML = '';
+    noMessagesEl.style.display = 'block';
+    noMessagesEl.classList.remove('hidden');
   }
 }
 
