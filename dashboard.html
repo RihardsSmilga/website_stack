@@ -291,9 +291,9 @@
 
       async function loadOrCreateConversation(otherUserId) {
         try {
-          // Hide "No messages in this chat yet" and clear messages initially
-          document.getElementById('noMessages').classList.add('hidden');
+          // Clear messages and hide "No messages" immediately
           document.getElementById('messageList').innerHTML = '';
+          document.getElementById('noMessages').classList.add('hidden');
 
           const res = await fetch(`${apiBase}/findOrCreateConvo`, {
             method: 'POST',
@@ -305,23 +305,25 @@
 
           const data = await res.json();
           currentConvo = data.convo_id;
-          lastKnownUpdate = null;
-          previousMessageCount = 0;
+          lastKnownUpdate = null; // Reset lastKnownUpdate for the new conversation
+          previousMessageCount = 0; // Reset message count
 
           document.getElementById('noConvoSelected').classList.add('hidden');
           document.getElementById('inputSection').classList.remove('hidden');
 
-          startAutoRefresh();
+          startAutoRefresh(); // Start refreshing for the new conversation
+
+          // Explicitly call loadMessages for the newly selected conversation
           await loadMessages();
         } catch (err) {
           console.error('Error loading conversation:', err);
-          document.getElementById('noMessages').classList.remove('hidden');
+          document.getElementById('noMessages').classList.remove('hidden'); // Show if error occurs
           alert('Failed to start conversation');
         }
       }
 
       async function checkForUpdates() {
-        if (!currentConvo) return;
+        if (!currentConvo) return; // Only check for updates if a conversation is selected
 
         try {
           const res = await fetch(`${apiBase}/getLastUpdate`, {
@@ -335,17 +337,23 @@
           if (data.error) {
             console.log('Update check error:', data.error);
             if (data.error.includes('not found')) {
+              // If convo not found on backend (e.g., deleted), reset current convo state
               currentConvo = null;
               document.getElementById('noConvoSelected').classList.remove('hidden');
               document.getElementById('inputSection').classList.add('hidden');
+              document.getElementById('messageList').innerHTML = ''; // Clear messages
+              document.getElementById('noMessages').classList.add('hidden'); // Hide no messages
+              clearInterval(refreshInterval); // Stop refreshing
             }
             return;
           }
 
+          // Trigger loadMessages if conversation exists and:
+          // 1. We don't have a lastKnownUpdate (first load or reset)
+          // 2. The backend's lastUpdated timestamp is newer than our lastKnownUpdate
           if (
-            !data.exists ||
-            (!lastKnownUpdate && data.lastUpdated) ||
-            (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate))
+            data.exists &&
+            (!lastKnownUpdate || (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate)))
           ) {
             await loadMessages();
           }
@@ -355,20 +363,21 @@
       }
 
       function startAutoRefresh() {
-        if (refreshInterval) clearInterval(refreshInterval);
+        if (refreshInterval) clearInterval(refreshInterval); // Clear any existing interval
         refreshInterval = setInterval(checkForUpdates, 3000);
       }
 
       async function loadMessages() {
         const list = document.getElementById('messageList');
-        // Always clear existing messages before loading new ones
+
+        // Clear existing messages and hide "No messages" before fetching
         list.innerHTML = '';
-        document.getElementById('noMessages').classList.add('hidden'); // Assume hidden until proven otherwise
+        document.getElementById('noMessages').classList.add('hidden');
+        document.getElementById('noConvoSelected').classList.add('hidden'); // Ensure this is hidden if we're loading messages
 
         if (!currentConvo) {
-          console.log('No conversation selected');
-          // No convo selected, so show the "No conversation selected" message, not "No messages"
-          document.getElementById('noConvoSelected').classList.remove('hidden');
+          console.log('No conversation selected to load messages for.');
+          document.getElementById('noConvoSelected').classList.remove('hidden'); // Show if no convo is selected
           return;
         }
 
@@ -388,18 +397,20 @@
           const wasScrolledToBottom = isScrolledToBottom(list);
 
           if (!data.messages || data.messages.length === 0) {
-            // No messages in this conversation, so show the specific message
+            // If no messages are returned, show the "No messages" text
             document.getElementById('noMessages').classList.remove('hidden');
-            return; // Exit here, no messages to display
-          } else {
-            document.getElementById('noMessages').classList.add('hidden'); // Ensure it's hidden if messages exist
+            return; // Exit as there are no messages to render
           }
+
+          // If messages exist, ensure "No messages" is hidden
+          document.getElementById('noMessages').classList.add('hidden');
 
           if (data.messages.length > previousMessageCount) {
             shouldAutoScroll = true;
           }
           previousMessageCount = data.messages.length;
 
+          // Determine the newest update from the fetched messages
           const newestUpdate = data.messages.reduce((latest, msg) => {
             const msgTime = new Date(msg.updated_at || msg.timestamp);
             return msgTime > latest ? msgTime : latest;
@@ -407,8 +418,8 @@
           lastKnownUpdate = newestUpdate.toISOString();
 
           const tempContainer = document.createElement('div');
-          tempContainer.style.display = 'none';
-          document.body.appendChild(tempContainer);
+          // Use a DocumentFragment for more efficient DOM manipulation
+          const fragment = document.createDocumentFragment();
 
           data.messages.forEach((msg) => {
             const messageContainer = document.createElement('div');
@@ -492,14 +503,11 @@
             }
 
             messageContainer.appendChild(messageElement);
-            tempContainer.appendChild(messageContainer);
+            fragment.appendChild(messageContainer);
           });
 
-          list.innerHTML = '';
-          while (tempContainer.firstChild) {
-            list.appendChild(tempContainer.firstChild);
-          }
-          document.body.removeChild(tempContainer);
+          // Append the fragment to the list once
+          list.appendChild(fragment);
 
           if (shouldAutoScroll || wasScrolledToBottom) {
             setTimeout(() => {
@@ -519,7 +527,7 @@
         } else {
           expandedMessages.add(messageId);
         }
-        loadMessages();
+        loadMessages(); // Reload messages to reflect expansion state
       }
 
       async function retractMessage(messageId, isCurrentlyRetracted) {
@@ -536,11 +544,12 @@
           if (!res.ok) throw new Error('Failed to toggle retract');
 
           const data = await res.json();
-          lastKnownUpdate = data.updated_at;
-          await loadMessages();
+          lastKnownUpdate = data.updated_at; // Update last known update time
+          await loadMessages(); // Reload messages to reflect changes
 
+          // Maintain expanded state after reload if applicable
           if (expandedMessages.has(messageId)) {
-            expandedMessages.delete(messageId);
+            expandedMessages.delete(messageId); // Remove and re-add to ensure it's at the end of the set
             expandedMessages.add(messageId);
           }
         } catch (err) {
@@ -565,7 +574,9 @@
         })
           .then(() => {
             messageInput.value = '';
-            shouldAutoScroll = true;
+            shouldAutoScroll = true; // Auto-scroll to bottom after sending
+            // Trigger an immediate check for updates to get the new message quickly
+            checkForUpdates();
           })
           .catch((err) => {
             console.error('Error sending message:', err);
