@@ -321,8 +321,6 @@
   </div>
   <script>
 // Fallback API base URL in case of DNS issues
-// Fallback API base URL in case of DNS issues
-// Fallback API base URL in case of DNS issues
 const apiBases = [
   'https://chat-backend.rsmilga08.workers.dev',
   'http://localhost:8787' // Fallback for development
@@ -376,22 +374,22 @@ function toggleConversationList() {
 
 document.getElementById('backButton').addEventListener('click', toggleConversationList);
 
-async function loadAvailableUsers() {
+async function loadExistingConversations() {
   const noConvosEl = document.getElementById('noConvos');
   const convoList = document.getElementById('convoList');
   
   try {
-    noConvosEl.textContent = 'Loading users...';
+    noConvosEl.textContent = 'Loading conversations...';
     noConvosEl.classList.remove('hidden');
     convoList.innerHTML = '';
 
-    console.log('Requesting users from:', `${apiBase}/getUsers`);
+    console.log('Requesting conversations from:', `${apiBase}/getConversations`);
     console.log('Current user ID:', userId);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(`${apiBase}/getUsers`, {
+    const res = await fetch(`${apiBase}/getConversations`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -414,7 +412,7 @@ async function loadAvailableUsers() {
       if (apiBase === apiBases[0] && apiBases.length > 1) {
         console.log('Trying fallback API...');
         apiBase = apiBases[1];
-        return loadAvailableUsers(); // Retry with fallback
+        return loadExistingConversations(); // Retry with fallback
       }
       
       throw new Error(`Server responded with ${res.status}: ${errorText || 'Unknown error'}`);
@@ -443,25 +441,25 @@ async function loadAvailableUsers() {
       throw new Error(data.error);
     }
 
-    // Extract users from response (your API returns {users: [...]} format)
-    let users = [];
-    if (data.users && Array.isArray(data.users)) {
-      users = data.users;
+    // Extract conversations from response
+    let conversations = [];
+    if (data.conversations && Array.isArray(data.conversations)) {
+      conversations = data.conversations;
     } else if (Array.isArray(data)) {
-      users = data;
+      conversations = data;
     } else {
       console.error('Unexpected response structure:', data);
       throw new Error('Unexpected response format from server');
     }
 
-    console.log('Extracted users array:', users);
+    console.log('Extracted conversations array:', conversations);
 
-    if (!Array.isArray(users)) {
-      throw new Error('Users data is not an array');
+    if (!Array.isArray(conversations)) {
+      throw new Error('Conversations data is not an array');
     }
 
-    if (users.length === 0) {
-      noConvosEl.textContent = 'No other users found';
+    if (conversations.length === 0) {
+      noConvosEl.textContent = 'No conversations found. Start a new chat to begin.';
       noConvosEl.classList.remove('hidden');
       return;
     }
@@ -469,29 +467,30 @@ async function loadAvailableUsers() {
     // Hide the "no convos" message
     noConvosEl.classList.add('hidden');
     
-    // Create user elements
-    users.forEach((user, index) => {
-      console.log(`Processing user ${index}:`, user);
+    // Create conversation elements
+    conversations.forEach((conversation, index) => {
+      console.log(`Processing conversation ${index}:`, conversation);
       
-      // Your API returns user_id and username fields
-      const userIdField = user.user_id;
-      const usernameField = user.username;
+      const userIdField = conversation.user_id;
+      const usernameField = conversation.username;
+      const convoId = conversation.convo_id;
       
-      if (!userIdField || !usernameField) {
-        console.warn('Skipping invalid user object:', user);
+      if (!userIdField || !usernameField || !convoId) {
+        console.warn('Skipping invalid conversation object:', conversation);
         return;
       }
 
-      console.log(`Creating element for user: ${usernameField} (ID: ${userIdField})`);
+      console.log(`Creating element for conversation with: ${usernameField} (ID: ${userIdField}, Convo: ${convoId})`);
 
       const userElement = document.createElement('div');
       userElement.textContent = usernameField;
       userElement.className = 'convo-user';
 
       userElement.onclick = () => {
-        console.log(`Selected user: ${usernameField} (ID: ${userIdField})`);
+        console.log(`Selected conversation with: ${usernameField} (ID: ${userIdField}, Convo: ${convoId})`);
         currentChatUser = usernameField;
         currentChatUserId = userIdField;
+        currentConvo = convoId; // Set the conversation ID directly
         document.getElementById('currentChatUserText').textContent = usernameField;
         shouldAutoScroll = true;
         
@@ -500,16 +499,16 @@ async function loadAvailableUsers() {
           toggleConversationList();
         }
         
-        loadOrCreateConversation(userIdField);
+        loadExistingConversation(convoId);
       };
 
       convoList.appendChild(userElement);
     });
 
-    console.log(`Successfully loaded ${users.length} users`);
+    console.log(`Successfully loaded ${conversations.length} conversations`);
 
   } catch (err) {
-    console.error('Complete error in loadAvailableUsers:', err);
+    console.error('Complete error in loadExistingConversations:', err);
     console.error('Error stack:', err.stack);
     
     noConvosEl.classList.remove('hidden');
