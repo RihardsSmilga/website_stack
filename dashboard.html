@@ -374,65 +374,129 @@
     // Debug logging
     const messageCount = data.messages ? data.messages.length : 0;
     console.log(`Found ${messageCount} messages in conversation ${currentConvo}`);
+
+    // Show "no messages" if empty array is returned
     if (messageCount === 0) {
       console.log('No messages available - showing empty state');
-    }
-
-    // Show "no messages" if empty
-    if (!data.messages || data.messages.length === 0) {
       document.getElementById('noMessages').classList.remove('hidden');
       document.getElementById('messageList').innerHTML = '';
+      return; // Exit early since there's nothing to render
     } else {
       document.getElementById('noMessages').classList.add('hidden');
     }
 
     // Check if new messages arrived (from any user)
-    if (data.messages && (data.messages.length > previousMessageCount)) {
-      console.log(`New messages detected (was ${previousMessageCount}, now ${data.messages.length})`);
+    if (messageCount > previousMessageCount) {
+      console.log(`New messages detected (was ${previousMessageCount}, now ${messageCount})`);
       shouldAutoScroll = true;
     }
-    previousMessageCount = data.messages ? data.messages.length : 0;
+    previousMessageCount = messageCount;
 
-    if (data.messages && data.messages.length > 0) {
-      const newestUpdate = data.messages.reduce((latest, msg) => {
-        const msgTime = new Date(msg.updated_at || msg.timestamp);
-        return msgTime > latest ? msgTime : latest;
-      }, new Date(0));
-      lastKnownUpdate = newestUpdate.toISOString();
-      console.log(`Most recent message at: ${lastKnownUpdate}`);
-    }
+    // Get most recent update time
+    const newestUpdate = data.messages.reduce((latest, msg) => {
+      const msgTime = new Date(msg.updated_at || msg.timestamp);
+      return msgTime > latest ? msgTime : latest;
+    }, new Date(0));
+    lastKnownUpdate = newestUpdate.toISOString();
+    console.log(`Most recent message at: ${lastKnownUpdate}`);
     
-    // Only proceed with message rendering if we have messages
-    if (data.messages && data.messages.length > 0) {
-      console.log('Rendering messages...');
-      const tempContainer = document.createElement('div');
-      tempContainer.style.display = 'none';
-      document.body.appendChild(tempContainer);
+    // Render messages
+    console.log('Rendering messages...');
+    const tempContainer = document.createElement('div');
+    tempContainer.style.display = 'none';
+    document.body.appendChild(tempContainer);
+    
+    data.messages.forEach(msg => {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'message-container';
       
-      data.messages.forEach(msg => {
-        const messageContainer = document.createElement('div');
-        messageContainer.className = 'message-container';
+      const messageElement = document.createElement('div');
+      messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+      
+      if (msg.retracted) {
+        console.log(`Rendering retracted message ID ${msg.message_id}`);
+        const retractedLabel = document.createElement('span');
+        retractedLabel.className = 'retracted-label';
+        retractedLabel.textContent = 'retracted';
         
-        const messageElement = document.createElement('div');
-        messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
         
-        if (msg.retracted) {
-          console.log(`Rendering retracted message ID ${msg.message_id}`);
-          // ... (rest of your retracted message rendering code)
-        } else {
-          // ... (rest of your normal message rendering code)
+        const originalMessage = document.createElement('div');
+        originalMessage.className = 'original-message';
+        originalMessage.textContent = msg.message;
+        
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          originalMessage.style.display = 'block';
+          actionButtons.style.display = 'block';
         }
         
-        messageContainer.appendChild(messageElement);
-        tempContainer.appendChild(messageContainer);
-      });
-      
-      list.innerHTML = '';
-      while (tempContainer.firstChild) {
-        list.appendChild(tempContainer.firstChild);
+        if (msg.user_id === userId) {
+          const unretractBtn = document.createElement('button');
+          unretractBtn.className = 'unretract-btn';
+          unretractBtn.textContent = 'Unretract';
+          
+          unretractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, true);
+          };
+          
+          actionButtons.appendChild(unretractBtn);
+        }
+        
+        retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
+        
+        messageElement.appendChild(retractedLabel);
+        messageElement.appendChild(originalMessage);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+      } else {
+        messageElement.textContent = msg.message;
+        
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
+        
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+        
+        if (msg.user_id === userId) {
+          const retractBtn = document.createElement('button');
+          retractBtn.className = 'retract-btn';
+          retractBtn.textContent = 'Retract';
+          
+          retractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, false);
+          };
+          
+          actionButtons.appendChild(retractBtn);
+        }
+        
+        messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
       }
-      document.body.removeChild(tempContainer);
+      
+      messageContainer.appendChild(messageElement);
+      tempContainer.appendChild(messageContainer);
+    });
+    
+    list.innerHTML = '';
+    while (tempContainer.firstChild) {
+      list.appendChild(tempContainer.firstChild);
     }
+    document.body.removeChild(tempContainer);
     
     if (shouldAutoScroll || wasScrolledToBottom) {
       console.log('Auto-scrolling to bottom');
@@ -443,6 +507,9 @@
     }
   } catch (err) {
     console.error('Error loading messages:', err);
+    // Ensure empty state is shown if there's an error
+    document.getElementById('noMessages').classList.remove('hidden');
+    document.getElementById('messageList').innerHTML = '';
   }
 }
 
