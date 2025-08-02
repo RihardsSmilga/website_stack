@@ -200,7 +200,7 @@
     <div id="messages">
       <div id="currentChatUser"></div>
       <div id="noConvoSelected">No conversation selected</div>
-      <div id="noMessages" class="hidden">No messages sent yet</div>
+      <div id="noMessages" class="hidden">No messages in this chat yet</div>
       <div id="messageList"></div>
       <div id="inputSection" class="hidden">
         <input type="text" id="messageInput" placeholder="Type your message...">
@@ -219,6 +219,7 @@
     let expandedMessages = new Set();
     let lastKnownUpdate = null;
     let shouldAutoScroll = true;
+    let previousMessageCount = 0;
 
     function formatDateTime(dateString) {
       const date = new Date(dateString);
@@ -306,6 +307,7 @@
         const data = await res.json();
         currentConvo = data.convo_id;
         lastKnownUpdate = null;
+        previousMessageCount = 0;
         
         document.getElementById('noConvoSelected').classList.add('hidden');
         document.getElementById('inputSection').classList.remove('hidden');
@@ -362,11 +364,17 @@
         const wasScrolledToBottom = isScrolledToBottom(list);
         
         // Show "no messages" if empty
-        if (data.messages && data.messages.length === 0) {
+        if (!data.messages || data.messages.length === 0) {
           document.getElementById('noMessages').classList.remove('hidden');
         } else {
           document.getElementById('noMessages').classList.add('hidden');
         }
+
+        // Check if new messages arrived from other user
+        if (data.messages && data.messages.length > previousMessageCount) {
+          shouldAutoScroll = true;
+        }
+        previousMessageCount = data.messages ? data.messages.length : 0;
 
         if (data.messages && data.messages.length > 0) {
           const newestUpdate = data.messages.reduce((latest, msg) => {
