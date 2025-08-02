@@ -368,158 +368,152 @@
       }
 
       async function loadMessages() {
-        const list = document.getElementById('messageList');
+  if (!currentConvo) {
+    console.log("No conversation selected");
+    return;
+  }
 
-        // Clear existing messages and hide "No messages" before fetching
-        list.innerHTML = '';
-        document.getElementById('noMessages').classList.add('hidden');
-        document.getElementById('noConvoSelected').classList.add('hidden'); // Ensure this is hidden if we're loading messages
+  try {
+    const res = await fetch(`${apiBase}/getMessages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ convo_id: currentConvo })
+    });
 
-        if (!currentConvo) {
-          console.log('No conversation selected to load messages for.');
-          document.getElementById('noConvoSelected').classList.remove('hidden'); // Show if no convo is selected
-          return;
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`API Error: ${error}`);
+    }
+
+    const data = await res.json();
+    const list = document.getElementById('messageList');
+    const wasScrolledToBottom = isScrolledToBottom(list);
+
+    list.innerHTML = ''; // Always clear first
+
+    if (!data.messages || data.messages.length === 0) {
+      document.getElementById('noMessages').classList.remove('hidden');
+      return;
+    } else {
+      document.getElementById('noMessages').classList.add('hidden');
+    }
+
+    if (data.messages.length > previousMessageCount) {
+      shouldAutoScroll = true;
+    }
+
+    previousMessageCount = data.messages.length;
+
+    const newestUpdate = data.messages.reduce((latest, msg) => {
+      const msgTime = new Date(msg.updated_at || msg.timestamp);
+      return msgTime > latest ? msgTime : latest;
+    }, new Date(0));
+    lastKnownUpdate = newestUpdate.toISOString();
+
+    const tempContainer = document.createElement('div');
+    tempContainer.style.display = 'none';
+    document.body.appendChild(tempContainer);
+
+    data.messages.forEach(msg => {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'message-container';
+
+      const messageElement = document.createElement('div');
+      messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+
+      if (msg.retracted) {
+        const retractedLabel = document.createElement('span');
+        retractedLabel.className = 'retracted-label';
+        retractedLabel.textContent = 'retracted';
+
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
+
+        const originalMessage = document.createElement('div');
+        originalMessage.className = 'original-message';
+        originalMessage.textContent = msg.message;
+
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          originalMessage.style.display = 'block';
+          actionButtons.style.display = 'block';
         }
 
-        try {
-          const res = await fetch(`${apiBase}/getMessages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ convo_id: currentConvo }),
-          });
-
-          if (!res.ok) {
-            const error = await res.text();
-            throw new Error(`API Error: ${error}`);
-          }
-
-          const data = await res.json();
-          const wasScrolledToBottom = isScrolledToBottom(list);
-
-          if (!data.messages || data.messages.length === 0) {
-            // If no messages are returned, show the "No messages" text
-            document.getElementById('noMessages').classList.remove('hidden');
-            return; // Exit as there are no messages to render
-          }
-
-          // If messages exist, ensure "No messages" is hidden
-          document.getElementById('noMessages').classList.add('hidden');
-
-          if (data.messages.length > previousMessageCount) {
-            shouldAutoScroll = true;
-          }
-          previousMessageCount = data.messages.length;
-
-          // Determine the newest update from the fetched messages
-          const newestUpdate = data.messages.reduce((latest, msg) => {
-            const msgTime = new Date(msg.updated_at || msg.timestamp);
-            return msgTime > latest ? msgTime : latest;
-          }, new Date(0));
-          lastKnownUpdate = newestUpdate.toISOString();
-
-          const tempContainer = document.createElement('div');
-          // Use a DocumentFragment for more efficient DOM manipulation
-          const fragment = document.createDocumentFragment();
-
-          data.messages.forEach((msg) => {
-            const messageContainer = document.createElement('div');
-            messageContainer.className = 'message-container';
-
-            const messageElement = document.createElement('div');
-            messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
-
-            if (msg.retracted) {
-              const retractedLabel = document.createElement('span');
-              retractedLabel.className = 'retracted-label';
-              retractedLabel.textContent = 'retracted';
-
-              const timestamp = document.createElement('div');
-              timestamp.className = 'timestamp';
-              timestamp.textContent = formatDateTime(msg.timestamp);
-
-              const originalMessage = document.createElement('div');
-              originalMessage.className = 'original-message';
-              originalMessage.textContent = msg.message;
-
-              const actionButtons = document.createElement('div');
-              actionButtons.className = 'action-buttons';
-
-              if (expandedMessages.has(msg.message_id)) {
-                timestamp.style.display = 'block';
-                originalMessage.style.display = 'block';
-                actionButtons.style.display = 'block';
-              }
-
-              if (msg.user_id === userId) {
-                const unretractBtn = document.createElement('button');
-                unretractBtn.className = 'unretract-btn';
-                unretractBtn.textContent = 'Unretract';
-
-                unretractBtn.onclick = async (e) => {
-                  e.stopPropagation();
-                  await retractMessage(msg.message_id, true);
-                };
-
-                actionButtons.appendChild(unretractBtn);
-              }
-
-              retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
-
-              messageElement.appendChild(retractedLabel);
-              messageElement.appendChild(originalMessage);
-              messageElement.appendChild(timestamp);
-              messageElement.appendChild(actionButtons);
-            } else {
-              messageElement.textContent = msg.message;
-
-              const timestamp = document.createElement('div');
-              timestamp.className = 'timestamp';
-              timestamp.textContent = formatDateTime(msg.timestamp);
-
-              const actionButtons = document.createElement('div');
-              actionButtons.className = 'action-buttons';
-
-              if (expandedMessages.has(msg.message_id)) {
-                timestamp.style.display = 'block';
-                actionButtons.style.display = 'block';
-              }
-
-              if (msg.user_id === userId) {
-                const retractBtn = document.createElement('button');
-                retractBtn.className = 'retract-btn';
-                retractBtn.textContent = 'Retract';
-
-                retractBtn.onclick = async (e) => {
-                  e.stopPropagation();
-                  await retractMessage(msg.message_id, false);
-                };
-
-                actionButtons.appendChild(retractBtn);
-              }
-
-              messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
-              messageElement.appendChild(timestamp);
-              messageElement.appendChild(actionButtons);
-            }
-
-            messageContainer.appendChild(messageElement);
-            fragment.appendChild(messageContainer);
-          });
-
-          // Append the fragment to the list once
-          list.appendChild(fragment);
-
-          if (shouldAutoScroll || wasScrolledToBottom) {
-            setTimeout(() => {
-              list.scrollTop = list.scrollHeight;
-            }, 0);
-            shouldAutoScroll = false;
-          }
-        } catch (err) {
-          console.error('Error loading messages:', err);
-          document.getElementById('noMessages').classList.remove('hidden'); // Show if error occurs
+        if (msg.user_id === userId) {
+          const unretractBtn = document.createElement('button');
+          unretractBtn.className = 'unretract-btn';
+          unretractBtn.textContent = 'Unretract';
+          unretractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, true);
+          };
+          actionButtons.appendChild(unretractBtn);
         }
+
+        retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
+
+        messageElement.appendChild(retractedLabel);
+        messageElement.appendChild(originalMessage);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+
+      } else {
+        messageElement.textContent = msg.message;
+
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
+
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+
+        if (msg.user_id === userId) {
+          const retractBtn = document.createElement('button');
+          retractBtn.className = 'retract-btn';
+          retractBtn.textContent = 'Retract';
+          retractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, false);
+          };
+          actionButtons.appendChild(retractBtn);
+        }
+
+        messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
       }
+
+      messageContainer.appendChild(messageElement);
+      tempContainer.appendChild(messageContainer);
+    });
+
+    while (tempContainer.firstChild) {
+      list.appendChild(tempContainer.firstChild);
+    }
+    document.body.removeChild(tempContainer);
+
+    if (shouldAutoScroll || wasScrolledToBottom) {
+      setTimeout(() => {
+        list.scrollTop = list.scrollHeight;
+      }, 0);
+      shouldAutoScroll = false;
+    }
+
+  } catch (err) {
+    console.error('Error loading messages:', err);
+    document.getElementById('noMessages').classList.remove('hidden');
+  }
+}
+
 
       function toggleMessageExpansion(messageId) {
         if (expandedMessages.has(messageId)) {
