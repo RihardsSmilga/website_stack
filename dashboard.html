@@ -318,442 +318,442 @@
     </div>
   </div>
   <script>
-    const apiBases = [
-      'https://chat-backend.rsmilga08.workers.dev',
-      'http://localhost:8787'
-    ];
-    let apiBase = apiBases[0];
+const apiBases = [
+  'https://chat-backend.rsmilga08.workers.dev',
+  'http://localhost:8787'
+];
+let apiBase = apiBases[0];
 
-    const userId = parseInt(sessionStorage.getItem('user_id'), 10);
-    const username = sessionStorage.getItem('username');
-    let currentConvo = null;
-    let currentChatUser = null;
-    let currentChatUserId = null;
-    let refreshInterval;
-    let expandedMessages = new Set();
-    let lastKnownUpdate = null;
-    let shouldAutoScroll = true;
-    let previousMessageCount = 0;
+const userId = parseInt(sessionStorage.getItem('user_id'), 10);
+const username = sessionStorage.getItem('username');
+let currentConvo = null;
+let currentChatUser = null;
+let currentChatUserId = null;
+let refreshInterval;
+let expandedMessages = new Set();
+let lastKnownUpdate = null;
+let shouldAutoScroll = true;
+let previousMessageCount = 0;
 
-    function formatDateTime(dateString) {
-      const date = new Date(dateString);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = String(date.getFullYear()).slice(-2);
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      return `${day}.${month}.${year} ${hours}:${minutes}`;
-    }
+function formatDateTime(dateString) {
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
+}
 
-    function isScrolledToBottom(element) {
-      return Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
-    }
+function isScrolledToBottom(element) {
+  return Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
+}
 
-    function fixFontIssues() {
-      const messageInput = document.getElementById('messageInput');
-      if (messageInput) {
-        messageInput.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-        messageInput.style.fontSize = '16px';
-        messageInput.style.lineHeight = '1.4';
+function fixFontIssues() {
+  const messageInput = document.getElementById('messageInput');
+  if (messageInput) {
+    messageInput.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+    messageInput.style.fontSize = '16px';
+    messageInput.style.lineHeight = '1.4';
+  }
+}
+
+if (!userId || !username) {
+  window.location.href = 'index.html';
+}
+
+document.getElementById('backButton').addEventListener('click', toggleConversationList);
+
+function toggleConversationList() {
+  document.getElementById('conversations').classList.toggle('active');
+}
+
+async function loadExistingConversations() {
+  const noConvosEl = document.getElementById('noConvos');
+  const convoList = document.getElementById('convoList');
+  
+  try {
+    noConvosEl.textContent = 'Loading conversations...';
+    noConvosEl.classList.remove('hidden');
+    convoList.innerHTML = '';
+
+    const res = await fetch(`${apiBase}/getConversations`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ current_user_id: userId })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      if (apiBase === apiBases[0] && apiBases.length > 1) {
+        apiBase = apiBases[1];
+        return loadExistingConversations();
       }
+      throw new Error(`Server responded with ${res.status}: ${errorText || 'Unknown error'}`);
     }
 
-    if (!userId || !username) {
-      window.location.href = 'index.html';
+    const data = await res.json();
+    console.log('Conversations data:', data);
+
+    if (!data.conversations) {
+      throw new Error('Invalid response format - missing conversations array');
     }
 
-    document.getElementById('backButton').addEventListener('click', toggleConversationList);
+    const conversations = data.conversations || [];
 
-    function toggleConversationList() {
-      document.getElementById('conversations').classList.toggle('active');
+    if (conversations.length === 0) {
+      noConvosEl.textContent = 'No conversations found. Start a new chat to begin.';
+      noConvosEl.classList.remove('hidden');
+      return;
     }
 
-    async function loadExistingConversations() {
-      const noConvosEl = document.getElementById('noConvos');
-      const convoList = document.getElementById('convoList');
-      
-      try {
-        noConvosEl.textContent = 'Loading conversations...';
-        noConvosEl.classList.remove('hidden');
-        convoList.innerHTML = '';
+    noConvosEl.classList.add('hidden');
+    
+    conversations.forEach(conversation => {
+      const userElement = document.createElement('div');
+      userElement.textContent = conversation.username;
+      userElement.className = 'convo-user';
 
-        const res = await fetch(`${apiBase}/getConversations`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ current_user_id: userId })
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          if (apiBase === apiBases[0] && apiBases.length > 1) {
-            apiBase = apiBases[1];
-            return loadExistingConversations();
-          }
-          throw new Error(`Server responded with ${res.status}: ${errorText || 'Unknown error'}`);
-        }
-
-        const data = await res.json();
-        console.log('Conversations data:', data);
-
-        if (!data.conversations) {
-          throw new Error('Invalid response format - missing conversations array');
-        }
-
-        const conversations = data.conversations || [];
-
-        if (conversations.length === 0) {
-          noConvosEl.textContent = 'No conversations found. Start a new chat to begin.';
-          noConvosEl.classList.remove('hidden');
-          return;
-        }
-
-        noConvosEl.classList.add('hidden');
+      userElement.onclick = () => {
+        currentChatUser = conversation.username;
+        currentChatUserId = conversation.user_id;
+        currentConvo = conversation.convo_id;
+        document.getElementById('currentChatUserText').textContent = conversation.username;
+        shouldAutoScroll = true;
         
-        conversations.forEach(conversation => {
-          const userElement = document.createElement('div');
-          userElement.textContent = conversation.username;
-          userElement.className = 'convo-user';
+        if (window.innerWidth < 768) {
+          toggleConversationList();
+        }
+        
+        loadExistingConversation(conversation.convo_id);
+      };
 
-          userElement.onclick = () => {
-            currentChatUser = conversation.username;
-            currentChatUserId = conversation.user_id;
-            currentConvo = conversation.convo_id;
-            document.getElementById('currentChatUserText').textContent = conversation.username;
-            shouldAutoScroll = true;
-            
-            if (window.innerWidth < 768) {
-              toggleConversationList();
-            }
-            
-            loadExistingConversation(conversation.convo_id);
+      convoList.appendChild(userElement);
+    });
+
+  } catch (err) {
+    console.error('Error loading conversations:', err);
+    noConvosEl.classList.remove('hidden');
+    convoList.innerHTML = '';
+    
+    if (err.name === 'AbortError') {
+      noConvosEl.textContent = 'Request timed out. Please check your connection.';
+    } else {
+      noConvosEl.textContent = `Error: ${err.message}`;
+    }
+  }
+}
+
+async function loadExistingConversation(convoId) {
+  try {
+    document.getElementById('noConvoSelected').classList.add('hidden');
+    document.getElementById('inputSection').classList.remove('hidden');
+    
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+    
+    currentConvo = convoId;
+    lastKnownUpdate = null;
+    previousMessageCount = 0;
+    
+    await loadMessages();
+    startAutoRefresh();
+  } catch (err) {
+    console.error('Error loading conversation:', err);
+  }
+}
+
+async function loadMessages() {
+  if (!currentConvo) return;
+
+  try {
+    const res = await fetch(`${apiBase}/getMessages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ convo_id: currentConvo })
+    });
+
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+
+    const data = await res.json();
+    const list = document.getElementById('messageList');
+    const noMessagesEl = document.getElementById('noMessages');
+    const wasScrolledToBottom = isScrolledToBottom(list);
+
+    list.innerHTML = '';
+
+    if (!data.messages || data.messages.length === 0) {
+      noMessagesEl.textContent = 'No messages in this chat yet';
+      noMessagesEl.style.display = 'block';
+      noMessagesEl.classList.remove('hidden');
+      return;
+    }
+
+    noMessagesEl.style.display = 'none';
+    noMessagesEl.classList.add('hidden');
+
+    if (data.messages.length > previousMessageCount) {
+      shouldAutoScroll = true;
+    }
+    previousMessageCount = data.messages.length;
+
+    const newestUpdate = data.messages.reduce((latest, msg) => {
+      const msgTime = new Date(msg.updated_at || msg.timestamp);
+      return msgTime > latest ? msgTime : latest;
+    }, new Date(0));
+    lastKnownUpdate = newestUpdate.toISOString();
+
+    data.messages.forEach(msg => {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'message-container';
+
+      const messageElement = document.createElement('div');
+      messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
+
+      if (msg.retracted) {
+        const retractedLabel = document.createElement('span');
+        retractedLabel.className = 'retracted-label';
+        retractedLabel.textContent = 'retracted';
+
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
+
+        const originalMessage = document.createElement('div');
+        originalMessage.className = 'original-message';
+        originalMessage.textContent = msg.message;
+
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          originalMessage.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+
+        if (msg.user_id === userId) {
+          const unretractBtn = document.createElement('button');
+          unretractBtn.className = 'unretract-btn';
+          unretractBtn.textContent = 'Unretract';
+          unretractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, true);
           };
-
-          convoList.appendChild(userElement);
-        });
-
-      } catch (err) {
-        console.error('Error loading conversations:', err);
-        noConvosEl.classList.remove('hidden');
-        convoList.innerHTML = '';
-        
-        if (err.name === 'AbortError') {
-          noConvosEl.textContent = 'Request timed out. Please check your connection.';
-        } else {
-          noConvosEl.textContent = `Error: ${err.message}`;
+          actionButtons.appendChild(unretractBtn);
         }
-      }
-    }
 
-    async function loadExistingConversation(convoId) {
-      try {
-        document.getElementById('noConvoSelected').classList.add('hidden');
-        document.getElementById('inputSection').classList.remove('hidden');
-        
+        retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
+
+        messageElement.appendChild(retractedLabel);
+        messageElement.appendChild(originalMessage);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+      } else {
+        messageElement.textContent = msg.message;
+
+        const timestamp = document.createElement('div');
+        timestamp.className = 'timestamp';
+        timestamp.textContent = formatDateTime(msg.timestamp);
+
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+
+        if (expandedMessages.has(msg.message_id)) {
+          timestamp.style.display = 'block';
+          actionButtons.style.display = 'block';
+        }
+
+        if (msg.user_id === userId) {
+          const retractBtn = document.createElement('button');
+          retractBtn.className = 'retract-btn';
+          retractBtn.textContent = 'Retract';
+          retractBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await retractMessage(msg.message_id, false);
+          };
+          actionButtons.appendChild(retractBtn);
+        }
+
+        messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
+        messageElement.appendChild(timestamp);
+        messageElement.appendChild(actionButtons);
+      }
+
+      messageContainer.appendChild(messageElement);
+      list.appendChild(messageContainer);
+    });
+
+    if (shouldAutoScroll || wasScrolledToBottom) {
+      setTimeout(() => {
+        list.scrollTop = list.scrollHeight;
+      }, 0);
+      shouldAutoScroll = false;
+    }
+  } catch (err) {
+    console.error('Error loading messages:', err);
+    const list = document.getElementById('messageList');
+    const noMessagesEl = document.getElementById('noMessages');
+    list.innerHTML = '';
+    noMessagesEl.textContent = `Error loading messages: ${err.message}`;
+    noMessagesEl.style.display = 'block';
+    noMessagesEl.classList.remove('hidden');
+  }
+}
+
+function toggleMessageExpansion(messageId) {
+  if (expandedMessages.has(messageId)) {
+    expandedMessages.delete(messageId);
+  } else {
+    expandedMessages.add(messageId);
+  }
+  loadMessages();
+}
+
+async function retractMessage(messageId, isCurrentlyRetracted) {
+  try {
+    const res = await fetch(`${apiBase}/toggleRetract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message_id: messageId,
+        retracted: isCurrentlyRetracted,
+      }),
+    });
+
+    if (!res.ok) throw new Error('Failed to toggle retract');
+
+    const data = await res.json();
+    lastKnownUpdate = data.updated_at;
+    await loadMessages();
+
+    if (expandedMessages.has(messageId)) {
+      expandedMessages.delete(messageId);
+      expandedMessages.add(messageId);
+    }
+  } catch (err) {
+    console.error('Error toggling retract:', err);
+  }
+}
+
+function sendMessage() {
+  const messageInput = document.getElementById('messageInput');
+  const message = messageInput.value.trim();
+
+  if (!message || !currentConvo) return;
+
+  fetch(`${apiBase}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      convo_id: currentConvo,
+      user_id: userId,
+      message,
+    }),
+  })
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error('Failed to send message');
+      }
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+      shouldAutoScroll = true;
+      setTimeout(checkForUpdates, 100);
+    })
+    .catch((err) => {
+      console.error('Error sending message:', err);
+      alert('Failed to send message. Please try again.');
+    });
+}
+
+async function checkForUpdates() {
+  if (!currentConvo) return;
+
+  try {
+    const res = await fetch(`${apiBase}/getLastUpdate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ convo_id: currentConvo }),
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      console.log('Update check error:', data.error);
+      if (data.error.includes('not found')) {
+        currentConvo = null;
+        document.getElementById('noConvoSelected').classList.remove('hidden');
+        document.getElementById('inputSection').classList.add('hidden');
+        document.getElementById('messageList').innerHTML = '';
+        document.getElementById('noMessages').classList.add('hidden');
         if (refreshInterval) {
           clearInterval(refreshInterval);
+          refreshInterval = null;
         }
-        
-        currentConvo = convoId;
-        lastKnownUpdate = null;
-        previousMessageCount = 0;
-        
-        await loadMessages();
-        startAutoRefresh();
-      } catch (err) {
-        console.error('Error loading conversation:', err);
       }
+      return;
     }
 
-    async function loadMessages() {
-      if (!currentConvo) return;
-
-      try {
-        const res = await fetch(`${apiBase}/getMessages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ convo_id: currentConvo })
-        });
-
-        if (!res.ok) {
-          throw new Error(await res.text());
-        }
-
-        const data = await res.json();
-        const list = document.getElementById('messageList');
-        const noMessagesEl = document.getElementById('noMessages');
-        const wasScrolledToBottom = isScrolledToBottom(list);
-
-        list.innerHTML = '';
-
-        if (!data.messages || data.messages.length === 0) {
-          noMessagesEl.textContent = 'No messages in this chat yet';
-          noMessagesEl.style.display = 'block';
-          noMessagesEl.classList.remove('hidden');
-          return;
-        }
-
-        noMessagesEl.style.display = 'none';
-        noMessagesEl.classList.add('hidden');
-
-        if (data.messages.length > previousMessageCount) {
-          shouldAutoScroll = true;
-        }
-        previousMessageCount = data.messages.length;
-
-        const newestUpdate = data.messages.reduce((latest, msg) => {
-          const msgTime = new Date(msg.updated_at || msg.timestamp);
-          return msgTime > latest ? msgTime : latest;
-        }, new Date(0));
-        lastKnownUpdate = newestUpdate.toISOString();
-
-        data.messages.forEach(msg => {
-          const messageContainer = document.createElement('div');
-          messageContainer.className = 'message-container';
-
-          const messageElement = document.createElement('div');
-          messageElement.className = msg.user_id === userId ? 'my-message' : 'user-message';
-
-          if (msg.retracted) {
-            const retractedLabel = document.createElement('span');
-            retractedLabel.className = 'retracted-label';
-            retractedLabel.textContent = 'retracted';
-
-            const timestamp = document.createElement('div');
-            timestamp.className = 'timestamp';
-            timestamp.textContent = formatDateTime(msg.timestamp);
-
-            const originalMessage = document.createElement('div');
-            originalMessage.className = 'original-message';
-            originalMessage.textContent = msg.message;
-
-            const actionButtons = document.createElement('div');
-            actionButtons.className = 'action-buttons';
-
-            if (expandedMessages.has(msg.message_id)) {
-              timestamp.style.display = 'block';
-              originalMessage.style.display = 'block';
-              actionButtons.style.display = 'block';
-            }
-
-            if (msg.user_id === userId) {
-              const unretractBtn = document.createElement('button');
-              unretractBtn.className = 'unretract-btn';
-              unretractBtn.textContent = 'Unretract';
-              unretractBtn.onclick = async (e) => {
-                e.stopPropagation();
-                await retractMessage(msg.message_id, true);
-              };
-              actionButtons.appendChild(unretractBtn);
-            }
-
-            retractedLabel.onclick = () => toggleMessageExpansion(msg.message_id);
-
-            messageElement.appendChild(retractedLabel);
-            messageElement.appendChild(originalMessage);
-            messageElement.appendChild(timestamp);
-            messageElement.appendChild(actionButtons);
-          } else {
-            messageElement.textContent = msg.message;
-
-            const timestamp = document.createElement('div');
-            timestamp.className = 'timestamp';
-            timestamp.textContent = formatDateTime(msg.timestamp);
-
-            const actionButtons = document.createElement('div');
-            actionButtons.className = 'action-buttons';
-
-            if (expandedMessages.has(msg.message_id)) {
-              timestamp.style.display = 'block';
-              actionButtons.style.display = 'block';
-            }
-
-            if (msg.user_id === userId) {
-              const retractBtn = document.createElement('button');
-              retractBtn.className = 'retract-btn';
-              retractBtn.textContent = 'Retract';
-              retractBtn.onclick = async (e) => {
-                e.stopPropagation();
-                await retractMessage(msg.message_id, false);
-              };
-              actionButtons.appendChild(retractBtn);
-            }
-
-            messageElement.onclick = () => toggleMessageExpansion(msg.message_id);
-            messageElement.appendChild(timestamp);
-            messageElement.appendChild(actionButtons);
-          }
-
-          messageContainer.appendChild(messageElement);
-          list.appendChild(messageContainer);
-        });
-
-        if (shouldAutoScroll || wasScrolledToBottom) {
-          setTimeout(() => {
-            list.scrollTop = list.scrollHeight;
-          }, 0);
-          shouldAutoScroll = false;
-        }
-      } catch (err) {
-        console.error('Error loading messages:', err);
-        const list = document.getElementById('messageList');
-        const noMessagesEl = document.getElementById('noMessages');
-        list.innerHTML = '';
-        noMessagesEl.textContent = `Error loading messages: ${err.message}`;
-        noMessagesEl.style.display = 'block';
-        noMessagesEl.classList.remove('hidden');
-      }
+    if (data.exists && (!lastKnownUpdate || (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate)))) {
+      await loadMessages();
     }
+  } catch (err) {
+    console.error('Error checking updates:', err);
+  }
+}
 
-    function toggleMessageExpansion(messageId) {
-      if (expandedMessages.has(messageId)) {
-        expandedMessages.delete(messageId);
-      } else {
-        expandedMessages.add(messageId);
-      }
-      loadMessages();
+function startAutoRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(checkForUpdates, 3000);
+}
+
+const messageInput = document.getElementById('messageInput');
+messageInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = (this.scrollHeight) + 'px';
+});
+
+const messageList = document.getElementById('messageList');
+messageList.addEventListener('scroll', () => {
+  if (!isScrolledToBottom(messageList)) {
+    shouldAutoScroll = false;
+  }
+});
+
+document.getElementById('sendButton').onclick = sendMessage;
+document.getElementById('messageInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+async function initialize() {
+  fixFontIssues();
+  await loadExistingConversations();
+  
+  setTimeout(() => {
+    document.documentElement.style.height = '100%';
+    document.body.style.height = '100%';
+    window.scrollTo(0, 0);
+    
+    if (window.innerWidth < 768 && !currentConvo) {
+      document.getElementById('conversations').classList.add('active');
     }
+  }, 100);
+}
 
-    async function retractMessage(messageId, isCurrentlyRetracted) {
-      try {
-        const res = await fetch(`${apiBase}/toggleRetract`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message_id: message_id,
-            retracted: isCurrentlyRetracted,
-          }),
-        });
+initialize();
 
-        if (!res.ok) throw new Error('Failed to toggle retract');
-
-        const data = await res.json();
-        lastKnownUpdate = data.updated_at;
-        await loadMessages();
-
-        if (expandedMessages.has(messageId)) {
-          expandedMessages.delete(messageId);
-          expandedMessages.add(messageId);
-        }
-      } catch (err) {
-        console.error('Error toggling retract:', err);
-      }
-    }
-
-    function sendMessage() {
-      const messageInput = document.getElementById('messageInput');
-      const message = messageInput.value.trim();
-
-      if (!message || !currentConvo) return;
-
-      fetch(`${apiBase}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          convo_id: currentConvo,
-          user_id: userId,
-          message,
-        }),
-      })
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error('Failed to send message');
-          }
-          messageInput.value = '';
-          messageInput.style.height = 'auto';
-          shouldAutoScroll = true;
-          setTimeout(checkForUpdates, 100);
-        })
-        .catch((err) => {
-          console.error('Error sending message:', err);
-          alert('Failed to send message. Please try again.');
-        });
-    }
-
-    async function checkForUpdates() {
-      if (!currentConvo) return;
-
-      try {
-        const res = await fetch(`${apiBase}/getLastUpdate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ convo_id: currentConvo }),
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          console.log('Update check error:', data.error);
-          if (data.error.includes('not found')) {
-            currentConvo = null;
-            document.getElementById('noConvoSelected').classList.remove('hidden');
-            document.getElementById('inputSection').classList.add('hidden');
-            document.getElementById('messageList').innerHTML = '';
-            document.getElementById('noMessages').classList.add('hidden');
-            if (refreshInterval) {
-              clearInterval(refreshInterval);
-              refreshInterval = null;
-            }
-          }
-          return;
-        }
-
-        if (data.exists && (!lastKnownUpdate || (data.lastUpdated && new Date(data.lastUpdated) > new Date(lastKnownUpdate)))) {
-          await loadMessages();
-        }
-      } catch (err) {
-        console.error('Error checking updates:', err);
-      }
-    }
-
-    function startAutoRefresh() {
-      if (refreshInterval) clearInterval(refreshInterval);
-      refreshInterval = setInterval(checkForUpdates, 3000);
-    }
-
-    const messageInput = document.getElementById('messageInput');
-    messageInput.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = (this.scrollHeight) + 'px';
-    });
-
-    const messageList = document.getElementById('messageList');
-    messageList.addEventListener('scroll', () => {
-      if (!isScrolledToBottom(messageList)) {
-        shouldAutoScroll = false;
-      }
-    });
-
-    document.getElementById('sendButton').onclick = sendMessage;
-    document.getElementById('messageInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-
-    async function initialize() {
-      fixFontIssues();
-      await loadExistingConversations();
-      
-      setTimeout(() => {
-        document.documentElement.style.height = '100%';
-        document.body.style.height = '100%';
-        window.scrollTo(0, 0);
-        
-        if (window.innerWidth < 768 && !currentConvo) {
-          document.getElementById('conversations').classList.add('active');
-        }
-      }, 100);
-    }
-
-    initialize();
-
-    window.addEventListener('beforeunload', () => {
-      if (refreshInterval) clearInterval(refreshInterval);
-    });
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
+});
   </script>
 </body>
 </html>
