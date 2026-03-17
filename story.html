@@ -2,97 +2,193 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Private Story Access</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Private Story</title>
     <style>
-        :root {
-            --primary: #2563eb;
-            --bg: #f8fafc;
+        /* Applying your requested styles */
+        * {
+            box-sizing: border-box;
         }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 100%; max-width: 450px; text-align: center; }
-        h1 { color: #1e293b; margin-bottom: 1.5rem; font-size: 1.5rem; }
-        input { width: 100%; padding: 12px; margin-bottom: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; font-size: 1rem; transition: border-color 0.2s; }
-        input:focus { outline: none; border-color: var(--primary); }
-        button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-        button:hover { opacity: 0.9; }
-        button:disabled { background: #94a3b8; cursor: not-allowed; }
-        #error-msg { color: #ef4444; font-size: 0.875rem; margin-top: 1rem; min-height: 1.25rem; }
-        
-        /* The content area starts hidden */
-        #story-container { display: none; text-align: left; }
-        .story-content { line-height: 1.7; color: #334155; white-space: pre-wrap; background: #f1f5f9; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary); }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: white;
+            color: black;
+            display: flex;
+            flex-direction: column;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        /* Content Area: Occupies whole page */
+        #content-container {
+            flex: 1;
+            padding: 40px 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        /* Floating Lock Button in the corner */
+        #lock-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        #unlock-btn {
+            background: black;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* Password Input Popover */
+        #password-box {
+            background: white;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 4px;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        #passwordInput {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            outline: none;
+            font-family: Arial, sans-serif;
+        }
+
+        #passwordInput::placeholder {
+            color: #ccc;
+        }
+
+        #submit-btn {
+            background: black;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Story Text Styling */
+        .story-text {
+            font-size: 1.1em;
+            white-space: pre-wrap; /* Preserves line breaks from DB */
+        }
+
+        .placeholder-text {
+            color: #888;
+            font-style: italic;
+            text-align: center;
+            margin-top: 20vh;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 767px) {
+            #content-container {
+                padding: 60px 20px 20px 20px; /* Extra top padding for the button */
+            }
+            #lock-controls {
+                top: 10px;
+                right: 10px;
+            }
+            .story-text {
+                font-size: 1em;
+            }
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <div id="login-ui">
-        <h1>Locked Entry</h1>
-        <input type="password" id="passwordInput" placeholder="Enter password..." onkeypress="handleKey(event)">
-        <button id="unlockBtn" onclick="attemptUnlock()">Unlock Content</button>
-        <div id="error-msg"></div>
+    <div id="lock-controls">
+        <button id="unlock-btn" onclick="togglePasswordBox()">Unlock</button>
+        <div id="password-box">
+            <input type="password" id="passwordInput" placeholder="Enter Password">
+            <button id="submit-btn" onclick="attemptUnlock()">Verify</button>
+        </div>
     </div>
 
-    <div id="story-container">
-        <h1 style="color: var(--primary)">Decrypted Content</h1>
-        <div class="story-content" id="storyText"></div>
-        <button onclick="location.reload()" style="margin-top: 1.5rem; background: #64748b;">Lock Again</button>
+    <div id="content-container">
+        <div id="display-area" class="placeholder-text">
+            This content is locked. Click the button to unlock.
+        </div>
     </div>
-</div>
 
-<script>
-    // 1. UPDATE THIS URL to your actual Cloudflare Worker URL
-    const WORKER_URL = 'https://chat-backend.rsmilga08.workers.dev/check-password';
+    <script>
+        // REPLACE THIS with your actual Worker URL + the path
+        const WORKER_URL = 'https://chat-backend.rsmilga0.workers.dev/check-password';
 
-    async function attemptUnlock() {
-        const passwordField = document.getElementById('passwordInput');
-        const btn = document.getElementById('unlockBtn');
-        const error = document.getElementById('error-msg');
-        const pw = passwordField.value;
-
-        if (!pw) {
-            error.textContent = "Please enter a password.";
-            return;
-        }
-
-        // UI Loading State
-        btn.disabled = true;
-        btn.textContent = "Verifying...";
-        error.textContent = "";
-
-        try {
-            const response = await fetch(WORKER_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ submittedPassword: pw })
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-                // Success! Switch the UI
-                document.getElementById('login-ui').style.display = 'none';
-                document.getElementById('story-container').style.display = 'block';
-                document.getElementById('storyText').textContent = result.data;
-            } else {
-                error.textContent = "Incorrect password. Access denied.";
-                passwordField.value = "";
+        function togglePasswordBox() {
+            const box = document.getElementById('password-box');
+            box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+            if(box.style.display === 'flex') {
+                document.getElementById('passwordInput').focus();
             }
-        } catch (err) {
-            error.textContent = "Worker connection error. Is it deployed?";
-            console.error(err);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = "Unlock Content";
         }
-    }
 
-    // Allow "Enter" key to trigger unlock
-    function handleKey(e) {
-        if (e.key === 'Enter') attemptUnlock();
-    }
-</script>
+        async function attemptUnlock() {
+            const pwInput = document.getElementById('passwordInput');
+            const pw = pwInput.value;
+            const displayArea = document.getElementById('display-area');
+            const submitBtn = document.getElementById('submit-btn');
 
+            if (!pw) return;
+
+            submitBtn.innerText = "Checking...";
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ submittedPassword: pw })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Inject the story data and apply styling
+                    displayArea.innerHTML = `<div class="story-text">${result.data}</div>`;
+                    displayArea.classList.remove('placeholder-text');
+                    
+                    // Hide the lock controls entirely after success
+                    document.getElementById('lock-controls').style.display = 'none';
+                } else {
+                    alert("Incorrect password.");
+                    submitBtn.innerText = "Verify";
+                    submitBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error connecting to server.");
+                submitBtn.innerText = "Verify";
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Allow "Enter" key to submit
+        document.getElementById('passwordInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                attemptUnlock();
+            }
+        });
+    </script>
 </body>
 </html>
