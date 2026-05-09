@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Private Story</title>
     <style>
-        /* Applying your requested styles */
         * {
             box-sizing: border-box;
         }
+
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -21,7 +21,7 @@
             -webkit-text-size-adjust: 100%;
         }
 
-        /* Content Area: Occupies whole page */
+        /* Content Area */
         #content-container {
             flex: 1;
             padding: 40px 20px;
@@ -29,9 +29,10 @@
             margin: 0 auto;
             line-height: 1.6;
             word-wrap: break-word;
+            width: 100%;
         }
 
-        /* Floating Lock Button in the corner */
+        /* Floating Lock Button */
         #lock-controls {
             position: fixed;
             top: 20px;
@@ -51,7 +52,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 0.9em;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
 
         /* Password Input Popover */
@@ -60,10 +61,10 @@
             border: 1px solid #ccc;
             padding: 15px;
             border-radius: 4px;
-            display: none; /* Hidden by default */
+            display: none;
             flex-direction: column;
             gap: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
         #passwordInput {
@@ -87,12 +88,29 @@
             cursor: pointer;
         }
 
-        /* Story Text Styling */
+        /* Story text */
         .story-text {
             font-size: 1.1em;
-            white-space: pre-wrap; /* Preserves line breaks from DB */
+            white-space: pre-wrap;
+            margin-bottom: 30px;
         }
 
+        /* Image gallery */
+        .image-gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .story-image {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+        }
+
+        /* Placeholder text */
         .placeholder-text {
             color: #888;
             font-style: italic;
@@ -100,15 +118,17 @@
             margin-top: 20vh;
         }
 
-        /* Mobile Adjustments */
+        /* Mobile adjustments */
         @media (max-width: 767px) {
             #content-container {
-                padding: 60px 20px 20px 20px; /* Extra top padding for the button */
+                padding: 60px 20px 20px 20px;
             }
+
             #lock-controls {
                 top: 10px;
                 right: 10px;
             }
+
             .story-text {
                 font-size: 1em;
             }
@@ -132,15 +152,107 @@
     </div>
 
     <script>
-        // REPLACE THIS with your actual Worker URL + the path
+        // Replace with your actual Worker URL
         const WORKER_URL = 'https://chat-backend.rsmilga08.workers.dev/check-password';
 
         function togglePasswordBox() {
             const box = document.getElementById('password-box');
             box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
-            if(box.style.display === 'flex') {
+
+            if (box.style.display === 'flex') {
                 document.getElementById('passwordInput').focus();
             }
+        }
+
+        /**
+         * Returns true if the string looks like an image URL.
+         */
+        function isImageUrl(url) {
+            return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+        }
+
+        /**
+         * Escapes HTML to prevent injection when displaying text.
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Renders content.
+         *
+         * Supported formats:
+         * 1. Plain text
+         * 2. Single image URL
+         * 3. Multiple image URLs separated by ;
+         * 4. Text mixed with image URLs separated by ;
+         */
+        function renderContent(data) {
+            const displayArea = document.getElementById('display-area');
+            displayArea.classList.remove('placeholder-text');
+
+            // Split on semicolons and trim whitespace
+            const parts = data
+                .split(';')
+                .map(part => part.trim())
+                .filter(part => part.length > 0);
+
+            let textParts = [];
+            let imageParts = [];
+
+            for (const part of parts) {
+                if (
+                    part.startsWith('http://') ||
+                    part.startsWith('https://')
+                ) {
+                    imageParts.push(part);
+                } else {
+                    textParts.push(part);
+                }
+            }
+
+            let html = '';
+
+            // Render text if any
+            if (textParts.length > 0) {
+                html += `
+                    <div class="story-text">
+                        ${escapeHtml(textParts.join('\n\n'))}
+                    </div>
+                `;
+            }
+
+            // Render images if any
+            if (imageParts.length > 0) {
+                html += '<div class="image-gallery">';
+
+                for (const imageUrl of imageParts) {
+                    html += `
+                        <img
+                            src="${imageUrl}"
+                            class="story-image"
+                            alt="Story image"
+                            loading="lazy"
+                            onerror="this.style.display='none'"
+                        >
+                    `;
+                }
+
+                html += '</div>';
+            }
+
+            // Fallback: if there were no semicolons and no URLs, show raw text
+            if (html === '') {
+                html = `
+                    <div class="story-text">
+                        ${escapeHtml(data)}
+                    </div>
+                `;
+            }
+
+            displayArea.innerHTML = html;
         }
 
         async function attemptUnlock() {
@@ -151,44 +263,47 @@
 
             if (!pw) return;
 
-            submitBtn.innerText = "Checking...";
+            submitBtn.innerText = 'Checking...';
             submitBtn.disabled = true;
 
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ submittedPassword: pw })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        submittedPassword: pw
+                    })
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
-                    // Inject the story data and apply styling
-                    displayArea.innerHTML = `<div class="story-text">${result.data}</div>`;
-                    displayArea.classList.remove('placeholder-text');
-                    
-                    // Hide the lock controls entirely after success
+                    renderContent(result.data);
+
+                    // Hide controls after successful unlock
                     document.getElementById('lock-controls').style.display = 'none';
                 } else {
-                    alert("Incorrect password.");
-                    submitBtn.innerText = "Verify";
+                    alert('Incorrect password.');
+                    submitBtn.innerText = 'Verify';
                     submitBtn.disabled = false;
                 }
             } catch (err) {
                 console.error(err);
-                alert("Error connecting to server.");
-                submitBtn.innerText = "Verify";
+                alert('Error connecting to server.');
+                submitBtn.innerText = 'Verify';
                 submitBtn.disabled = false;
             }
         }
 
-        // Allow "Enter" key to submit
+        // Submit with Enter key
         document.getElementById('passwordInput').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 attemptUnlock();
             }
         });
     </script>
+
 </body>
 </html>
