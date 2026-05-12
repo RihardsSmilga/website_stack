@@ -90,10 +90,11 @@
 
         /* Story text */
         .story-text {
-            font-size: 1.1em;
-            white-space: pre-wrap;
-            margin-bottom: 30px;
-        }
+    font-size: 1.1em;
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 0;
+}
 
         /* Image gallery */
         .image-gallery {
@@ -222,9 +223,7 @@
             // Render text if any
             if (textParts.length > 0) {
                 html += `
-                    <div class="story-text">
-                        ${escapeHtml(textParts.join('\n\n'))}
-                    </div>
+                    <div class="story-text">${escapeHtml(textParts.join('\n\n'))}</div>
                 `;
             }
 
@@ -249,11 +248,7 @@
 
             // Fallback: if there were no semicolons and no URLs, show raw text
             if (html === '') {
-                html = `
-                    <div class="story-text">
-                        ${escapeHtml(data)}
-                    </div>
-                `;
+                html = `<div class="story-text">${escapeHtml(data)}</div>`;
             }
 
             displayArea.innerHTML = html;
